@@ -266,8 +266,10 @@ def fetch_artist_catalogue(
 
     Returns the number of songs actually saved.
     """
-    # Ask Genius for a buffered amount so skips don't undercount us.
-    request = min(int(min_songs * 1.3) + 5, hard_cap)
+    # Ask Genius for exactly what the user asked for — no buffering.
+    # The cost of buffering (the bar fills and Genius keeps pulling)
+    # outweighs the small chance that one of the N is an instrumental.
+    request = min(min_songs, hard_cap)
     # While the slow Genius scrape is happening, hook its logger so we
     # can emit a real-time progress event for every song it pulls.
     with _lyricsgenius_progress(progress, total=min_songs):
