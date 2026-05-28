@@ -128,7 +128,7 @@ def _line(obj: dict[str, Any]) -> bytes:
 @app.get("/api/artist")
 def artist(
     name: str = Query(..., min_length=1),
-    max: int = Query(20, ge=1, le=100),
+    min: int = Query(20, ge=1, le=100, alias="min"),
 ) -> StreamingResponse:
     """Stream NDJSON: zero or more `{type:"progress"}` events, then exactly
     one terminal `{type:"result"}` or `{type:"error"}`.
@@ -149,7 +149,9 @@ def artist(
 
             def worker() -> None:
                 try:
-                    fetch.fetch_artist_catalogue(name, max_songs=max, progress=on_progress)
+                    fetch.fetch_artist_catalogue(
+                        name, min_songs=min, progress=on_progress
+                    )
                     events.put({"type": "_done"})
                 except fetch.FetchError as e:
                     events.put({"type": "error", "message": str(e)})
@@ -160,7 +162,7 @@ def artist(
             t = threading.Thread(target=worker, daemon=True)
             t.start()
 
-            yield _line({"type": "progress", "done": 0, "total": max, "current": "starting…"})
+            yield _line({"type": "progress", "done": 0, "total": min, "current": "starting…"})
 
             while True:
                 ev = events.get()

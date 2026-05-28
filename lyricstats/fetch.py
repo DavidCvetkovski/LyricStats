@@ -194,11 +194,21 @@ def fetch_song(artist: str, title: str, *, force: bool = False) -> FetchedSong:
 def fetch_artist_catalogue(
     name: str,
     *,
-    max_songs: int = 30,
+    min_songs: int = 20,
+    hard_cap: int = 100,
     progress=None,  # callable(done, total, current_title) for UI
 ) -> int:
-    """Fetch up to `max_songs` for an artist. Returns count fetched."""
-    artist_obj = _genius_search_artist(name, max_songs=max_songs)
+    """Fetch at least `min_songs` for an artist (capped at `hard_cap`).
+
+    Genius skips instrumentals and pages without lyrics, so naïvely
+    requesting N often yields fewer. We ask for a buffered amount up
+    front so the saved count reliably hits the minimum.
+
+    Returns the number of songs actually saved.
+    """
+    # Ask Genius for a buffered amount so skips don't undercount us.
+    request = min(int(min_songs * 1.3) + 5, hard_cap)
+    artist_obj = _genius_search_artist(name, max_songs=request)
     if artist_obj is None:
         raise FetchError(f"Artist '{name}' not found on Genius.")
 
@@ -207,14 +217,23 @@ def fetch_artist_catalogue(
         genius_id=_id_from_api_path(artist_obj),
         genius_url=getattr(artist_obj, "url", None),
     )
+
     songs = artist_obj.songs or []
-    total = len(songs)
+    # Count songs that actually have lyrics — those are the ones the
+    # progress bar should measure against the minimum the user asked for.
+    with_lyrics = [s for s in songs if getattr(s, "lyrics", None)]
+    target = min(min_songs, len(with_lyrics)) if with_lyrics else 0
+    # If Genius returned fewer playable songs than the minimum, the artist
+    # simply doesn't have that many on file — surface the real total.
+    if not with_lyrics:
+        return 0
+
     saved = 0
-    for i, song in enumerate(songs, 1):
+    for song in with_lyrics:
+        if saved >= min_songs and saved >= target:
+            break
         if progress:
-            progress(i, total, song.title)
-        if not getattr(song, "lyrics", None):
-            continue
+            progress(saved + 1, max(target, min_songs), song.title)
         db.upsert_song(
             a,
             title=song.title,
@@ -225,5 +244,6 @@ def fetch_artist_catalogue(
         )
         saved += 1
         time.sleep(0.2)
+
     db.mark_catalogue_fetched(a)
     return saved
