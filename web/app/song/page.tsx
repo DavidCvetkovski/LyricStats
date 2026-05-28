@@ -141,9 +141,6 @@ function SongView({ song }: { song: SongPayload }) {
     <article className="mt-16 rise">
       {/* Article header */}
       <header className="text-center border-b border-rule-strong pb-12">
-        <p className="smallcaps mb-3">
-          {song.source === "cache" ? "Recalled from the archive" : `Filed via ${song.source}`}
-        </p>
         <h1
           className="display text-ink mx-auto"
           style={{ fontSize: "clamp(3rem, 9vw, 7rem)", maxWidth: "16ch" }}
