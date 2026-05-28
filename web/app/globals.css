@@ -1,0 +1,207 @@
+@import "tailwindcss";
+
+/* ── Editorial design tokens ────────────────────────────────────────────── */
+:root {
+  /* Warm off-white paper */
+  --paper: #f6f1e8;
+  --paper-soft: #efe8d9;
+  --paper-deep: #ebe2cf;
+
+  /* Ink (near-black, warm) */
+  --ink: #1a1614;
+  --ink-soft: #4a423d;
+  --ink-mute: #8a8076;
+
+  /* Hairline rules */
+  --rule: #1a161422;
+  --rule-strong: #1a16144d;
+
+  /* Oxblood accent — used sparingly */
+  --accent: #7a1f2b;
+  --accent-soft: #a04553;
+
+  /* Yellowed-page highlight */
+  --highlight: #f2d77a55;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-soft: var(--paper-soft);
+  --color-paper-deep: var(--paper-deep);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-mute: var(--ink-mute);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-highlight: var(--highlight);
+
+  --font-serif: var(--font-serif);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+/* ── Base typography ────────────────────────────────────────────────────── */
+html {
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  background: var(--paper);
+  color: var(--ink);
+}
+
+::selection {
+  background: var(--highlight);
+  color: var(--ink);
+}
+
+/* Display headings */
+.display {
+  font-family: var(--font-serif), Georgia, serif;
+  font-weight: 400;
+  font-feature-settings: "ss01", "lnum";
+  letter-spacing: -0.02em;
+  line-height: 0.95;
+}
+
+/* Small-caps editorial label */
+.smallcaps {
+  font-family: var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--ink-mute);
+}
+
+/* Big stat number — serif, tabular figures */
+.figure {
+  font-family: var(--font-serif), Georgia, serif;
+  font-feature-settings: "tnum", "lnum";
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+/* Drop cap for editorial body text */
+.dropcap::first-letter {
+  font-family: var(--font-serif), Georgia, serif;
+  float: left;
+  font-size: 4.5rem;
+  line-height: 0.85;
+  padding: 0.2rem 0.55rem 0 0;
+  font-weight: 400;
+  color: var(--accent);
+}
+
+/* Hairline ornament */
+.hairline {
+  display: block;
+  border: 0;
+  height: 1px;
+  background: var(--rule-strong);
+}
+
+.diamond::after {
+  content: "❖";
+  display: inline-block;
+  margin: 0 0.65rem;
+  color: var(--accent);
+  font-size: 0.75em;
+  transform: translateY(-1px);
+}
+
+/* Editorial textured input */
+.field {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--rule-strong);
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 1.5rem;
+  padding: 0.35rem 0;
+  width: 100%;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.field:focus {
+  border-bottom-color: var(--accent);
+}
+.field::placeholder {
+  color: var(--ink-mute);
+  font-style: italic;
+}
+
+/* Pill button */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+  background: var(--ink);
+  color: var(--paper);
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s, transform 0.1s;
+}
+.pill:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.pill:active {
+  transform: translateY(1px);
+}
+.pill[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.pill-ghost {
+  background: transparent;
+  color: var(--ink);
+}
+.pill-ghost:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Subtle paper grain — uses a single SVG-encoded noise overlay */
+.paper-grain {
+  position: relative;
+  isolation: isolate;
+}
+.paper-grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.35;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.10  0 0 0 0 0.08  0 0 0 0 0.06  0 0 0 0.18 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* Smooth section reveal on first paint */
+@keyframes paperRise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rise { animation: paperRise 0.5s ease-out both; }
+.rise-1 { animation-delay: 0.05s; }
+.rise-2 { animation-delay: 0.12s; }
+.rise-3 { animation-delay: 0.2s; }
+.rise-4 { animation-delay: 0.28s; }
