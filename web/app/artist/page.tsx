@@ -151,26 +151,43 @@ function ArtistPageInner() {
           {loading ? "Filing…" : "Examine →"}
         </button>
 
-        {/* Editorial source toggle — small caps + a thin underline state */}
-        <div className="sm:col-span-3 flex items-center gap-3 pt-1">
+        {/* Editorial checkbox — empty box off, oxblood ✓ inside when on */}
+        <div className="sm:col-span-3 flex items-start gap-3 pt-1">
           <button
             type="button"
-            role="switch"
+            role="checkbox"
             aria-checked={forceFetch}
             onClick={() => setForceFetch((v) => !v)}
-            className="group inline-flex items-center gap-2 text-[0.72rem] uppercase tracking-[0.18em] text-ink hover:text-accent transition-colors"
+            className="group inline-flex items-center gap-3 text-left"
           >
             <span
-              className={`inline-block w-3.5 h-3.5 border border-ink-soft transition-all ${
-                forceFetch ? "bg-ink" : "bg-paper"
-              }`}
               aria-hidden
-            />
-            Fetch fresh from Genius
+              className="relative inline-flex items-center justify-center w-[18px] h-[18px] border border-ink bg-paper transition-colors group-hover:border-accent shrink-0"
+            >
+              {forceFetch && (
+                <span
+                  className="font-serif text-accent leading-none"
+                  style={{
+                    fontSize: "18px",
+                    transform: "translateY(-1px)",
+                    fontWeight: 500,
+                  }}
+                >
+                  ✓
+                </span>
+              )}
+            </span>
+            <span className="flex flex-col">
+              <span className="text-[0.72rem] uppercase tracking-[0.18em] text-ink group-hover:text-accent transition-colors">
+                Fetch fresh from Genius
+              </span>
+              <span className="text-[0.72rem] italic font-serif text-ink-mute mt-0.5">
+                {forceFetch
+                  ? "on — will pull new songs from the wires"
+                  : "off — using what's already on file (fast)"}
+              </span>
+            </span>
           </button>
-          <span className="text-[0.72rem] italic font-serif text-ink-mute">
-            — leave off to use what's already on file (fast)
-          </span>
         </div>
       </form>
 
