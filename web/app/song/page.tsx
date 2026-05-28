@@ -225,18 +225,21 @@ function SongView({ song }: { song: SongPayload }) {
           {s.section_sequence.length > 0 && (
             <div>
               <p className="smallcaps mb-3">Architecture</p>
-              <p className="font-serif text-xl leading-relaxed text-ink">
+              <ol className="border-t border-rule">
                 {s.section_sequence.map((kind, i) => (
-                  <span key={i}>
-                    <span className="italic">{kind}</span>
-                    {i < s.section_sequence.length - 1 && (
-                      <span className="text-accent mx-2" aria-hidden>
-                        ·
-                      </span>
-                    )}
-                  </span>
+                  <li
+                    key={i}
+                    className="grid grid-cols-[2rem_1fr] items-baseline gap-3 border-b border-rule py-1.5"
+                  >
+                    <span className="figure text-ink-mute text-sm tabular-nums">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <span className="font-serif italic text-xl text-ink">
+                      {kind}
+                    </span>
+                  </li>
                 ))}
-              </p>
+              </ol>
               <p className="mt-2 text-[0.78rem] italic text-ink-mute">
                 the order, from first to last
               </p>
