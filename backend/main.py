@@ -58,7 +58,8 @@ def song(
 
     db_song = db.find_song(s.artist, s.title)
     cached = db.load_stats(db_song) if db_song else None
-    if cached:
+    # Migrate old caches that pre-date new fields (e.g. section_sequence)
+    if cached and "section_sequence" in cached:
         st = stats.SongStats(**cached)
     else:
         st = stats.compute(s.lyrics)
@@ -91,7 +92,7 @@ def _aggregate_payload(name: str) -> dict[str, Any]:
     metas: list[dict[str, Any]] = []
     for s in songs:
         cached = db.load_stats(s)
-        if cached:
+        if cached and "section_sequence" in cached:
             st = stats.SongStats(**cached)
         else:
             st = stats.compute(s.lyrics)

@@ -8,6 +8,7 @@ import { StatFigure } from "@/components/StatFigure";
 import { WordTable } from "@/components/WordTable";
 import { PullQuote } from "@/components/PullQuote";
 import { ProgressLine } from "@/components/ProgressLine";
+import { loadLastArtist, saveLastArtist } from "@/lib/lastSearch";
 
 export default function ArtistPage() {
   return (
@@ -44,6 +45,7 @@ function ArtistPageInner() {
       });
       setData(a);
       setProgress(null);
+      saveLastArtist({ name: n, max: m });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setData(null);
@@ -53,14 +55,29 @@ function ArtistPageInner() {
   }, []);
 
   useEffect(() => {
-    if (!urlName) return;
-    const key = `${urlName}|${urlMax}`;
-    if (key === lastKey.current) return;
-    lastKey.current = key;
-    setName(urlName);
-    setMax(urlMax);
-    run(urlName, urlMax);
-  }, [urlName, urlMax, run]);
+    if (urlName) {
+      const key = `${urlName}|${urlMax}`;
+      if (key === lastKey.current) return;
+      lastKey.current = key;
+      setName(urlName);
+      setMax(urlMax);
+      run(urlName, urlMax);
+      return;
+    }
+    if (lastKey.current) return;
+    const last = loadLastArtist();
+    if (last) {
+      lastKey.current = `${last.name}|${last.max}`;
+      setName(last.name);
+      setMax(last.max);
+      const q = new URLSearchParams({
+        name: last.name,
+        max: String(last.max),
+      }).toString();
+      router.replace(`/artist?${q}`);
+      run(last.name, last.max);
+    }
+  }, [urlName, urlMax, run, router]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
