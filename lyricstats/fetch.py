@@ -6,6 +6,7 @@ All results land in SQLite so we never re-scrape.
 from __future__ import annotations
 
 import logging
+import random
 import re
 import time
 from contextlib import contextmanager
@@ -256,49 +257,91 @@ def fetch_artist_catalogue(
     *,
     min_songs: int = 20,
     hard_cap: int = 100,
+    pool_size: int = 200,
+    shuffle_seed: str | None = None,
     progress=None,  # callable(done, total, current_title) for UI
 ) -> int:
-    """Fetch at least `min_songs` for an artist (capped at `hard_cap`).
+    """Save a uniformly random sample of `min_songs` from the artist's
+    Genius catalogue.
 
-    Genius skips instrumentals and pages without lyrics, so naïvely
-    requesting N often yields fewer. We ask for a buffered amount up
-    front so the saved count reliably hits the minimum.
+    Two-phase fetch so the progress bar tracks only what the user actually
+    waits for:
 
-    Returns the number of songs actually saved.
+    1. Pool phase: pull up to `pool_size` song metadata entries via
+       Genius's paginated artist_songs endpoint. No lyrics here, just
+       titles + ids. Cheap.
+    2. Random sample: pick `min_songs` ids from the pool. With
+       `shuffle_seed` set, the sample is deterministic; without it,
+       fully random.
+    3. Lyric phase: fetch lyrics for exactly those N ids, reporting
+       progress per song.
+
+    Saved count is at most `min_songs`. Songs without lyrics
+    (instrumentals etc.) are silently skipped.
     """
-    # Ask Genius for exactly what the user asked for — no buffering.
-    # The cost of buffering (the bar fills and Genius keeps pulling)
-    # outweighs the small chance that one of the N is an instrumental.
-    request = min(min_songs, hard_cap)
-    # While the slow Genius scrape is happening, hook its logger so we
-    # can emit a real-time progress event for every song it pulls.
-    with _lyricsgenius_progress(progress, total=min_songs):
-        artist_obj = _genius_search_artist(name, max_songs=request)
+    n = min(min_songs, hard_cap)
+    g = _genius_client()
+
+    # ── 1. Resolve artist ────────────────────────────────────────────
+    # search_artist with max_songs=0 just gets artist metadata, no lyrics.
+    artist_obj = _genius_search_artist(name, max_songs=0)
     if artist_obj is None:
         raise FetchError(f"Artist '{name}' not found on Genius.")
+    artist_id = _id_from_api_path(artist_obj)
+    if artist_id is None:
+        raise FetchError(f"Could not resolve Genius id for '{name}'.")
 
     a = db.get_or_create_artist(
         artist_obj.name,
-        genius_id=_id_from_api_path(artist_obj),
+        genius_id=artist_id,
         genius_url=getattr(artist_obj, "url", None),
     )
 
-    songs = artist_obj.songs or []
-    # Count songs that actually have lyrics — those are the ones the
-    # progress bar should measure against the minimum the user asked for.
-    with_lyrics = [s for s in songs if getattr(s, "lyrics", None)]
-    target = min(min_songs, len(with_lyrics)) if with_lyrics else 0
-    # If Genius returned fewer playable songs than the minimum, the artist
-    # simply doesn't have that many on file — surface the real total.
-    if not with_lyrics:
-        return 0
-
-    # Saving to SQLite is essentially instant — no per-song progress here,
-    # the live progress was emitted by the logger hook above during fetch.
-    saved = 0
-    for song in with_lyrics:
-        if saved >= min_songs and saved >= target:
+    # ── 2. Pool song metadata ────────────────────────────────────────
+    pool: list[dict[str, Any]] = []
+    per_page = 50
+    page = 1
+    while len(pool) < pool_size:
+        try:
+            res = g.artist_songs(artist_id, per_page=per_page, page=page, sort="popularity")
+        except Exception as e:  # noqa: BLE001
+            log.warning("artist_songs page %d failed: %s", page, e)
             break
+        songs_meta = (res or {}).get("songs", []) if isinstance(res, dict) else []
+        if not songs_meta:
+            break
+        # Keep collaborations too — artists with frequent features
+        # (e.g. Buba Corelli with Jala Brat) would otherwise show as
+        # almost-empty catalogues.
+        pool.extend(songs_meta)
+        if len(songs_meta) < per_page:
+            break
+        page += 1
+        time.sleep(0.15)
+
+    if not pool:
+        raise FetchError(f"No songs found on Genius for '{artist_obj.name}'.")
+
+    # ── 3. Random sample ─────────────────────────────────────────────
+    rng = random.Random(shuffle_seed) if shuffle_seed else random.Random()
+    sample = rng.sample(pool, min(n, len(pool)))
+
+    # ── 4. Fetch lyrics for the sampled songs ────────────────────────
+    saved = 0
+    for i, meta in enumerate(sample, 1):
+        title = meta.get("title", "?")
+        sid = meta.get("id")
+        if progress:
+            progress(i, n, title)
+        if not sid:
+            continue
+        try:
+            song = g.search_song(song_id=int(sid), get_full_info=False)
+        except Exception as e:  # noqa: BLE001
+            log.warning("lyric fetch failed for %s: %s", title, e)
+            continue
+        if not song or not song.lyrics:
+            continue
         db.upsert_song(
             a,
             title=song.title,
@@ -308,11 +351,9 @@ def fetch_artist_catalogue(
             genius_id=_id_from_api_path(song),
         )
         saved += 1
+        time.sleep(0.15)
 
-    # Make sure the bar lands on 100% at the end even if logger parsing
-    # dropped the last event (different lyricsgenius versions vary slightly).
     if progress:
-        progress(min_songs, min_songs, "done")
-
+        progress(n, n, "done")
     db.mark_catalogue_fetched(a)
     return saved

@@ -82,16 +82,25 @@ def song(
 
 
 def _pick_n(songs: list[db.Song], n: int, seed_key: str) -> list[db.Song]:
-    """Deterministic random sample of N songs from the cached list.
+    """Random sample of N songs from the cached list.
 
-    Sorts the cache by title first so the choice is invariant to insertion
-    order (i.e. it doesn't drift when the cache grows). The seed key
-    incorporates the requested N, so different N for the same artist
-    yields a stable, distinct sample.
+    With a shuffle token in the seed key, every Examine click returns a
+    different sample. Without one (initial URL load / restored from
+    localStorage), the seed is stable for the same (artist, N) so a
+    refresh shows the same songs.
+
+    The population is sorted by song id first only to make `rng.sample`
+    indices map to a stable order across runs — they're then shuffled
+    into the returned list by sample(), so output order is random.
     """
     if n >= len(songs):
-        return songs
-    ordered = sorted(songs, key=lambda s: (s.title or "").lower())
+        # Even when N matches, return in a randomised order so the
+        # catalogue display doesn't appear sorted by anything.
+        ordered = sorted(songs, key=lambda s: s.id or 0)
+        rng = random.Random(seed_key)
+        rng.shuffle(ordered)
+        return ordered
+    ordered = sorted(songs, key=lambda s: s.id or 0)
     rng = random.Random(seed_key)
     return rng.sample(ordered, n)
 
@@ -180,7 +189,10 @@ def artist(
             def worker() -> None:
                 try:
                     fetch.fetch_artist_catalogue(
-                        name, min_songs=min, progress=on_progress
+                        name,
+                        min_songs=min,
+                        shuffle_seed=shuffle or None,
+                        progress=on_progress,
                     )
                     events.put({"type": "_done"})
                 except fetch.FetchError as e:
