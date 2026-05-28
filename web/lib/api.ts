@@ -22,12 +22,79 @@ export function getSong(
   return get<SongPayload>(`/api/song?${q.toString()}`);
 }
 
-export function getArtist(
+// ── streaming artist ──────────────────────────────────────────────────────
+
+export type ArtistProgress = {
+  done: number;
+  total: number;
+  current: string;
+};
+
+export type ArtistStreamHandlers = {
+  onProgress?: (p: ArtistProgress) => void;
+  signal?: AbortSignal;
+};
+
+/**
+ * Streams the artist endpoint, calling onProgress for each progress event
+ * and resolving with the final ArtistPayload when the result arrives.
+ */
+export async function streamArtist(
   name: string,
-  opts?: { fetch?: boolean; max?: number },
+  max: number,
+  handlers: ArtistStreamHandlers = {},
 ): Promise<ArtistPayload> {
-  const q = new URLSearchParams({ name });
-  if (opts?.fetch) q.set("fetch", "1");
-  if (opts?.max) q.set("max", String(opts.max));
-  return get<ArtistPayload>(`/api/artist?${q.toString()}`);
+  const q = new URLSearchParams({ name, max: String(max) });
+  const res = await fetch(`${BASE}/api/artist?${q.toString()}`, {
+    signal: handlers.signal,
+    cache: "no-store",
+  });
+  if (!res.ok || !res.body) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`API ${res.status}: ${body || res.statusText}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let result: ArtistPayload | null = null;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      let ev: {
+        type: string;
+        done?: number;
+        total?: number;
+        current?: string;
+        message?: string;
+        payload?: ArtistPayload;
+      };
+      try {
+        ev = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (ev.type === "progress") {
+        handlers.onProgress?.({
+          done: ev.done ?? 0,
+          total: ev.total ?? 1,
+          current: ev.current ?? "",
+        });
+      } else if (ev.type === "result" && ev.payload) {
+        result = ev.payload;
+      } else if (ev.type === "error") {
+        throw new Error(ev.message || "Unknown server error");
+      }
+    }
+  }
+
+  if (!result) throw new Error("Stream ended without a result");
+  return result;
 }
