@@ -10,3 +10,11 @@ __pycache__/
 data/
 .DS_Store
 .streamlit/secrets.toml
+
+# Next.js
+web/node_modules/
+web/.next/
+web/out/
+web/.turbo/
+web/next-env.d.ts
+

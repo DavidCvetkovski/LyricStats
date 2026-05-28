@@ -13,6 +13,8 @@ dependencies = [
     "altair>=5.3",
     "requests>=2.32",
     "tenacity>=8.2",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
 ]
 
 [project.optional-dependencies]
