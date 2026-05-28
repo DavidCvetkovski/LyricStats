@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getSong } from "@/lib/api";
 import type { SongPayload } from "@/lib/types";
 import { StatFigure } from "@/components/StatFigure";
@@ -8,20 +9,34 @@ import { WordTable } from "@/components/WordTable";
 import { PullQuote } from "@/components/PullQuote";
 
 export default function SongPage() {
-  const [artist, setArtist] = useState("");
-  const [title, setTitle] = useState("");
-  const [force, setForce] = useState(false);
+  return (
+    <Suspense fallback={null}>
+      <SongPageInner />
+    </Suspense>
+  );
+}
+
+function SongPageInner() {
+  const router = useRouter();
+  const params = useSearchParams();
+
+  const urlArtist = params.get("artist") ?? "";
+  const urlTitle = params.get("title") ?? "";
+
+  const [artist, setArtist] = useState(urlArtist);
+  const [title, setTitle] = useState(urlTitle);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [song, setSong] = useState<SongPayload | null>(null);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!artist || !title) return;
+  const lastKey = useRef<string>("");
+
+  const run = useCallback(async (a: string, t: string) => {
+    if (!a || !t) return;
     setLoading(true);
     setError(null);
     try {
-      const s = await getSong(artist, title, { force });
+      const s = await getSong(a, t);
       setSong(s);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -29,6 +44,24 @@ export default function SongPage() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Auto-load whenever URL has both params (initial mount + back/forward nav)
+  useEffect(() => {
+    const key = `${urlArtist}${urlTitle}`;
+    if (!urlArtist || !urlTitle) return;
+    if (key === lastKey.current) return;
+    lastKey.current = key;
+    setArtist(urlArtist);
+    setTitle(urlTitle);
+    run(urlArtist, urlTitle);
+  }, [urlArtist, urlTitle, run]);
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!artist || !title) return;
+    const q = new URLSearchParams({ artist, title }).toString();
+    router.push(`/song?${q}`);
   }
 
   return (
@@ -64,21 +97,18 @@ export default function SongPage() {
             onChange={(e) => setTitle(e.target.value)}
           />
         </label>
-        <div className="sm:col-span-2 flex items-center gap-4">
+        <div className="sm:col-span-2">
           <button type="submit" className="pill" disabled={loading}>
             {loading ? "Setting type…" : "Examine →"}
           </button>
-          <label className="flex items-center gap-2 text-[0.78rem] text-ink-mute cursor-pointer">
-            <input
-              type="checkbox"
-              checked={force}
-              onChange={(e) => setForce(e.target.checked)}
-              className="accent-accent"
-            />
-            re-fetch from source
-          </label>
         </div>
       </form>
+
+      {loading && (
+        <p className="mt-10 font-serif italic text-ink-soft text-lg">
+          Retrieving the lyrics. One moment…
+        </p>
+      )}
 
       {error && (
         <p className="mt-10 font-serif italic text-accent text-lg border-l-2 border-accent pl-4">
@@ -86,7 +116,7 @@ export default function SongPage() {
         </p>
       )}
 
-      {song && <SongView song={song} />}
+      {song && !loading && <SongView song={song} />}
     </div>
   );
 }
@@ -95,7 +125,7 @@ function SongView({ song }: { song: SongPayload }) {
   const s = song.stats;
   return (
     <article className="mt-16 rise">
-      {/* Article header — hero */}
+      {/* Article header */}
       <header className="text-center border-b border-rule-strong pb-12">
         <p className="smallcaps mb-3">
           {song.source === "cache" ? "Recalled from the archive" : `Filed via ${song.source}`}
@@ -120,16 +150,12 @@ function SongView({ song }: { song: SongPayload }) {
         </p>
       </header>
 
-      {/* Pull quote — the artist's most-used content word */}
       {s.top_words_no_stop[0] && (
-        <PullQuote
-          cite={`appears ${s.top_words_no_stop[0][1]} times`}
-        >
+        <PullQuote cite={`appears ${s.top_words_no_stop[0][1]} times`}>
           {s.top_words_no_stop[0][0]}
         </PullQuote>
       )}
 
-      {/* Big figures */}
       <section className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4 my-12">
         <StatFigure
           label="Total Words"
@@ -157,14 +183,9 @@ function SongView({ song }: { song: SongPayload }) {
         />
       </section>
 
-      {/* Body — two-column editorial */}
       <section className="grid gap-12 lg:grid-cols-[1.1fr_1fr] mt-12">
         <div>
-          <WordTable
-            title="Most-used Words"
-            rows={s.top_words_no_stop}
-            max={15}
-          />
+          <WordTable title="Most-used Words" rows={s.top_words_no_stop} max={15} />
           <p className="mt-3 text-[0.78rem] italic text-ink-mute">
             Stopwords filtered. The bar beneath each word is its share of the
             most-used.
@@ -175,7 +196,10 @@ function SongView({ song }: { song: SongPayload }) {
           <Inline label="Avg. word length" value={`${s.avg_word_length} chars`} />
           <Inline label="Avg. words per line" value={String(s.avg_words_per_line)} />
           <Inline label="Sections" value={String(s.section_count)} />
-          <Inline label="Line repetition" value={`${Math.round(s.repetition_ratio * 100)}%`} />
+          <Inline
+            label="Line repetition"
+            value={`${Math.round(s.repetition_ratio * 100)}%`}
+          />
 
           <div>
             <p className="smallcaps mb-3">Longest words</p>
@@ -189,7 +213,10 @@ function SongView({ song }: { song: SongPayload }) {
               <p className="smallcaps mb-3">Architecture</p>
               <ul className="space-y-2">
                 {Object.entries(s.section_kinds).map(([kind, n]) => (
-                  <li key={kind} className="flex justify-between border-b border-rule py-1">
+                  <li
+                    key={kind}
+                    className="flex justify-between border-b border-rule py-1"
+                  >
                     <span className="font-serif italic">{kind}</span>
                     <span className="figure">{n}</span>
                   </li>
@@ -200,19 +227,19 @@ function SongView({ song }: { song: SongPayload }) {
         </div>
       </section>
 
-      {/* Lyrics — collapsed details */}
-      <details className="mt-16 border-t border-rule-strong pt-6 group">
-        <summary className="smallcaps cursor-pointer select-none flex items-center justify-between">
-          <span>The lyrics in full</span>
-          <span className="text-ink-mute group-open:rotate-90 transition-transform">→</span>
-        </summary>
-        <pre className="mt-6 font-serif text-lg leading-[1.7] whitespace-pre-wrap text-ink-soft max-w-3xl mx-auto">
+      {/* Lyrics — always expanded */}
+      <section className="mt-20 border-t border-rule-strong pt-10">
+        <header className="text-center mb-8">
+          <p className="smallcaps mb-2">The Text</p>
+          <h3 className="display text-3xl sm:text-4xl">The lyrics in full</h3>
+        </header>
+        <pre className="font-serif text-lg leading-[1.7] whitespace-pre-wrap text-ink-soft max-w-3xl mx-auto">
           {song.lyrics}
         </pre>
-        <p className="text-[0.72rem] italic text-ink-mute mt-4 text-center">
+        <p className="text-[0.72rem] italic text-ink-mute mt-6 text-center">
           Lyrics retrieved via Genius. Shown for analytical purposes only.
         </p>
-      </details>
+      </section>
     </article>
   );
 }

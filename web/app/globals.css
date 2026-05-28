@@ -140,6 +140,20 @@ body {
   font-style: italic;
 }
 
+/* Hide native number-input spin buttons */
+.field.no-spin,
+input[type="number"].field {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.field.no-spin::-webkit-outer-spin-button,
+.field.no-spin::-webkit-inner-spin-button,
+input[type="number"].field::-webkit-outer-spin-button,
+input[type="number"].field::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 /* Pill button */
 .pill {
   display: inline-flex;

@@ -1,34 +1,72 @@
 "use client";
 
-import { useState } from "react";
-import { getArtist } from "@/lib/api";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { streamArtist, type ArtistProgress } from "@/lib/api";
 import type { ArtistPayload } from "@/lib/types";
 import { StatFigure } from "@/components/StatFigure";
 import { WordTable } from "@/components/WordTable";
 import { PullQuote } from "@/components/PullQuote";
+import { ProgressLine } from "@/components/ProgressLine";
 
 export default function ArtistPage() {
-  const [name, setName] = useState("");
-  const [max, setMax] = useState(20);
-  const [doFetch, setDoFetch] = useState(true);
+  return (
+    <Suspense fallback={null}>
+      <ArtistPageInner />
+    </Suspense>
+  );
+}
+
+function ArtistPageInner() {
+  const router = useRouter();
+  const params = useSearchParams();
+
+  const urlName = params.get("name") ?? "";
+  const urlMax = Math.max(1, Math.min(100, parseInt(params.get("max") ?? "20") || 20));
+
+  const [name, setName] = useState(urlName);
+  const [max, setMax] = useState(urlMax);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<ArtistProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<ArtistPayload | null>(null);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name) return;
+  const lastKey = useRef<string>("");
+
+  const run = useCallback(async (n: string, m: number) => {
+    if (!n) return;
     setLoading(true);
     setError(null);
+    setProgress(null);
     try {
-      const a = await getArtist(name, { fetch: doFetch, max });
+      const a = await streamArtist(n, m, {
+        onProgress: (p) => setProgress(p),
+      });
       setData(a);
+      setProgress(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setData(null);
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    if (!urlName) return;
+    const key = `${urlName}|${urlMax}`;
+    if (key === lastKey.current) return;
+    lastKey.current = key;
+    setName(urlName);
+    setMax(urlMax);
+    run(urlName, urlMax);
+  }, [urlName, urlMax, run]);
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name) return;
+    const q = new URLSearchParams({ name, max: String(max) }).toString();
+    router.push(`/artist?${q}`);
   }
 
   return (
@@ -41,7 +79,10 @@ export default function ArtistPage() {
         </p>
       </header>
 
-      <form onSubmit={onSubmit} className="mt-10 grid gap-6 sm:grid-cols-[2fr_1fr_auto] items-end">
+      <form
+        onSubmit={onSubmit}
+        className="mt-10 grid gap-8 sm:grid-cols-[2fr_1fr_auto] items-end"
+      >
         <label className="block">
           <span className="smallcaps mb-1 block">The Artist</span>
           <input
@@ -56,31 +97,32 @@ export default function ArtistPage() {
         <label className="block">
           <span className="smallcaps mb-1 block">Songs at most</span>
           <input
-            className="field"
+            className="field no-spin"
             type="number"
+            inputMode="numeric"
             min={1}
             max={100}
             value={max}
-            onChange={(e) => setMax(parseInt(e.target.value || "20"))}
+            onChange={(e) => setMax(parseInt(e.target.value || "20") || 20)}
           />
         </label>
         <button type="submit" className="pill" disabled={loading}>
           {loading ? "Filing…" : "Examine →"}
         </button>
-        <label className="sm:col-span-3 flex items-center gap-2 text-[0.78rem] text-ink-mute cursor-pointer">
-          <input
-            type="checkbox"
-            checked={doFetch}
-            onChange={(e) => setDoFetch(e.target.checked)}
-            className="accent-accent"
-          />
-          fetch fresh from Genius (uncheck to use only the local archive)
-        </label>
       </form>
 
-      {loading && (
-        <p className="mt-10 font-serif italic text-ink-soft text-lg">
-          Working through the catalogue. This may take a moment on the first read…
+      {loading && progress && (
+        <ProgressLine
+          done={progress.done}
+          total={progress.total}
+          current={progress.current}
+          label="Filing"
+        />
+      )}
+
+      {loading && !progress && (
+        <p className="mt-10 font-serif italic text-ink-soft text-lg max-w-2xl mx-auto text-center">
+          Reading what is on file…
         </p>
       )}
 
@@ -90,7 +132,7 @@ export default function ArtistPage() {
         </p>
       )}
 
-      {data && <ArtistView data={data} />}
+      {data && !loading && <ArtistView data={data} />}
     </div>
   );
 }
@@ -169,11 +211,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
           )}
         </div>
 
-        <WordTable
-          title="Most-used Words"
-          rows={s.top_words_no_stop}
-          max={20}
-        />
+        <WordTable title="Most-used Words" rows={s.top_words_no_stop} max={20} />
       </section>
 
       <section className="mt-20">
@@ -188,7 +226,9 @@ function ArtistView({ data }: { data: ArtistPayload }) {
                 {String(i + 1).padStart(2, "0")}
               </span>
               <div>
-                <p className="font-serif text-xl text-ink leading-tight">{song.title}</p>
+                <p className="font-serif text-xl text-ink leading-tight">
+                  {song.title}
+                </p>
                 {song.album && (
                   <p className="text-[0.78rem] italic text-ink-mute mt-0.5">
                     {song.album}
