@@ -6,8 +6,10 @@ All results land in SQLite so we never re-scrape.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass
+from typing import Any
 
 import requests
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -20,6 +22,44 @@ log = logging.getLogger(__name__)
 
 class FetchError(RuntimeError):
     pass
+
+
+_API_PATH_ID_RE = re.compile(r"/(?:artists|songs)/(\d+)")
+
+
+def _id_from_api_path(obj: Any) -> int | None:
+    """Extract numeric id from lyricsgenius object's api_path (e.g. '/artists/53624')."""
+    path = getattr(obj, "api_path", None)
+    if not path:
+        return None
+    m = _API_PATH_ID_RE.search(str(path))
+    return int(m.group(1)) if m else None
+
+
+def _album_name(obj: Any) -> str | None:
+    """Song.album is a dict in lyricsgenius v3 ({'name': ..., 'full_title': ...})."""
+    album = getattr(obj, "album", None)
+    if not album:
+        return None
+    if isinstance(album, dict):
+        return album.get("name") or album.get("full_title")
+    if isinstance(album, str):
+        return album
+    return getattr(album, "name", None)
+
+
+def _song_year(obj: Any) -> int | None:
+    """Year isn't a direct field on lyricsgenius v3 Song. Try release_date string."""
+    for attr in ("year", "release_date", "release_date_for_display"):
+        val = getattr(obj, attr, None)
+        if val:
+            m = re.match(r"(\d{4})", str(val))
+            if m:
+                try:
+                    return int(m.group(1))
+                except ValueError:
+                    pass
+    return None
 
 
 # ---- Genius ----------------------------------------------------------------
@@ -122,20 +162,16 @@ def fetch_song(artist: str, title: str, *, force: bool = False) -> FetchedSong:
         song = None
 
     if song and song.lyrics:
-        a = db.get_or_create_artist(artist, genius_id=getattr(song, "artist_id", None))
-        year = None
-        if getattr(song, "year", None):
-            try:
-                year = int(str(song.year)[:4])
-            except (ValueError, TypeError):
-                year = None
+        primary = getattr(song, "primary_artist", None)
+        artist_genius_id = _id_from_api_path(primary) if primary else None
+        a = db.get_or_create_artist(artist, genius_id=artist_genius_id)
         row = db.upsert_song(
             a,
             title=song.title,
             lyrics=song.lyrics,
-            album=getattr(song, "album", None),
-            year=year,
-            genius_id=getattr(song, "id", None),
+            album=_album_name(song),
+            year=_song_year(song),
+            genius_id=_id_from_api_path(song),
         )
         return FetchedSong(
             artist=a.name, title=row.title, lyrics=row.lyrics,
@@ -163,28 +199,24 @@ def fetch_artist_catalogue(
     if artist_obj is None:
         raise FetchError(f"Artist '{name}' not found on Genius.")
 
-    a = db.get_or_create_artist(artist_obj.name, genius_id=artist_obj.id)
+    a = db.get_or_create_artist(artist_obj.name, genius_id=_id_from_api_path(artist_obj))
     songs = artist_obj.songs or []
     total = len(songs)
+    saved = 0
     for i, song in enumerate(songs, 1):
         if progress:
             progress(i, total, song.title)
         if not getattr(song, "lyrics", None):
             continue
-        year = None
-        if getattr(song, "year", None):
-            try:
-                year = int(str(song.year)[:4])
-            except (ValueError, TypeError):
-                year = None
         db.upsert_song(
             a,
             title=song.title,
             lyrics=song.lyrics,
-            album=getattr(song, "album", None),
-            year=year,
-            genius_id=getattr(song, "id", None),
+            album=_album_name(song),
+            year=_song_year(song),
+            genius_id=_id_from_api_path(song),
         )
+        saved += 1
         time.sleep(0.2)
     db.mark_catalogue_fetched(a)
-    return len(songs)
+    return saved
