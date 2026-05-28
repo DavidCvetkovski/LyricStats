@@ -24,13 +24,15 @@ function ArtistPageInner() {
 
   const urlName = params.get("name") ?? "";
   const urlMin = Math.max(1, Math.min(100, parseInt(params.get("min") ?? "20") || 20));
-  const urlPreferCache = params.get("prefer_cache") !== "0"; // default true
+  // Default behaviour: use the cache (fast). The toggle below opts INTO
+  // re-fetching, so it's unchecked unless you want fresh data.
+  const urlForceFetch = params.get("fresh") === "1";
   const urlShuffle = params.get("shuffle") ?? "";
 
   const [name, setName] = useState(urlName);
   const [minText, setMinText] = useState(String(urlMin));
   const min = clampMin(minText);
-  const [preferCache, setPreferCache] = useState(urlPreferCache);
+  const [forceFetch, setForceFetch] = useState(urlForceFetch);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<ArtistProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,18 +41,18 @@ function ArtistPageInner() {
   const lastKey = useRef<string>("");
 
   const run = useCallback(
-    async (n: string, m: number, pc: boolean, sh: string) => {
+    async (n: string, m: number, fresh: boolean, sh: string) => {
       if (!n) return;
       setLoading(true);
       setError(null);
       setProgress(null);
       try {
-        const a = await streamArtist(n, m, pc, sh, {
+        const a = await streamArtist(n, m, !fresh, sh, {
           onProgress: (p) => setProgress(p),
         });
         setData(a);
         setProgress(null);
-        saveLastArtist({ name: n, min: m, preferCache: pc });
+        saveLastArtist({ name: n, min: m, preferCache: !fresh });
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
         setData(null);
@@ -63,44 +65,47 @@ function ArtistPageInner() {
 
   useEffect(() => {
     if (urlName) {
-      const key = `${urlName}|${urlMin}|${urlPreferCache}|${urlShuffle}`;
+      const key = `${urlName}|${urlMin}|${urlForceFetch}|${urlShuffle}`;
       if (key === lastKey.current) return;
       lastKey.current = key;
       setName(urlName);
       setMinText(String(urlMin));
-      setPreferCache(urlPreferCache);
-      run(urlName, urlMin, urlPreferCache, urlShuffle);
+      setForceFetch(urlForceFetch);
+      run(urlName, urlMin, urlForceFetch, urlShuffle);
       return;
     }
     if (lastKey.current) return;
     const last = loadLastArtist();
     if (last) {
-      const pc = last.preferCache ?? true;
-      lastKey.current = `${last.name}|${last.min}|${pc}|`;
+      // Stored value is preferCache (true = use cache). Invert for the UI.
+      const fresh = last.preferCache === false;
+      lastKey.current = `${last.name}|${last.min}|${fresh}|`;
       setName(last.name);
       setMinText(String(last.min));
-      setPreferCache(pc);
-      const q = new URLSearchParams({
+      setForceFetch(fresh);
+      const qParams: Record<string, string> = {
         name: last.name,
         min: String(last.min),
-        prefer_cache: pc ? "1" : "0",
-      }).toString();
+      };
+      if (fresh) qParams.fresh = "1";
+      const q = new URLSearchParams(qParams).toString();
       router.replace(`/artist?${q}`);
-      run(last.name, last.min, pc, ""); // stable on restore — no shuffle
+      run(last.name, last.min, fresh, ""); // stable on restore — no shuffle
     }
-  }, [urlName, urlMin, urlPreferCache, urlShuffle, run, router]);
+  }, [urlName, urlMin, urlForceFetch, urlShuffle, run, router]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name) return;
     // Fresh shuffle token on every Examine click → new random sample.
     const shuffle = Math.random().toString(36).slice(2, 10);
-    const q = new URLSearchParams({
+    const qParams: Record<string, string> = {
       name,
       min: String(min),
-      prefer_cache: preferCache ? "1" : "0",
       shuffle,
-    }).toString();
+    };
+    if (forceFetch) qParams.fresh = "1";
+    const q = new URLSearchParams(qParams).toString();
     router.push(`/artist?${q}`);
   }
 
@@ -151,20 +156,20 @@ function ArtistPageInner() {
           <button
             type="button"
             role="switch"
-            aria-checked={preferCache}
-            onClick={() => setPreferCache((v) => !v)}
+            aria-checked={forceFetch}
+            onClick={() => setForceFetch((v) => !v)}
             className="group inline-flex items-center gap-2 text-[0.72rem] uppercase tracking-[0.18em] text-ink hover:text-accent transition-colors"
           >
             <span
               className={`inline-block w-3.5 h-3.5 border border-ink-soft transition-all ${
-                preferCache ? "bg-ink" : "bg-paper"
+                forceFetch ? "bg-ink" : "bg-paper"
               }`}
               aria-hidden
             />
-            Prefer the archive
+            Fetch fresh from Genius
           </button>
           <span className="text-[0.72rem] italic font-serif text-ink-mute">
-            — use what we already have on file
+            — leave off to use what's already on file (fast)
           </span>
         </div>
       </form>
