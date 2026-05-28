@@ -29,7 +29,8 @@ STOPWORDS: set[str] = {
     "sve", "svi", "kad", "tad", "tu", "tamo", "ovde", "ovo", "ono", "taj", "ova", "onaj",
     "bez", "od", "do", "za", "po", "iz", "kroz", "uz", "niz", "pred", "pod", "nad", "među",
     "bih", "bi", "bismo", "biste", "ću", "ćeš", "će", "ćemo", "ćete",
-    "jer", "biti", "samo", "jako",
+    "jer", "biti", "samo", "jako", "si", "sam", "smo", "ste", "kô", "k'o", "ko",
+    "već", "još", "li", "nek",
 }
 
 
