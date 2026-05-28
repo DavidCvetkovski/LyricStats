@@ -96,7 +96,7 @@ def _pick_n(songs: list[db.Song], n: int, seed_key: str) -> list[db.Song]:
     return rng.sample(ordered, n)
 
 
-def _aggregate_payload(name: str, n: int) -> dict[str, Any]:
+def _aggregate_payload(name: str, n: int, shuffle: str) -> dict[str, Any]:
     a = db.get_artist(name)
     if not a:
         raise HTTPException(status_code=404, detail=f"No cached data for '{name}'.")
@@ -104,7 +104,7 @@ def _aggregate_payload(name: str, n: int) -> dict[str, Any]:
     if not all_songs:
         raise HTTPException(status_code=404, detail=f"No songs for '{name}'.")
 
-    songs = _pick_n(all_songs, n, seed_key=f"{a.name}|{n}")
+    songs = _pick_n(all_songs, n, seed_key=f"{a.name}|{n}|{shuffle}")
     pairs: list[tuple[str, str]] = []
     metas: list[dict[str, Any]] = []
     for s in songs:
@@ -149,6 +149,7 @@ def artist(
     name: str = Query(..., min_length=1),
     min: int = Query(20, ge=1, le=100, alias="min"),
     prefer_cache: bool = Query(True),
+    shuffle: str = Query("", max_length=32),
 ) -> StreamingResponse:
     """Stream NDJSON: zero or more `{type:"progress"}` events, then exactly
     one terminal `{type:"result"}` or `{type:"error"}`.
@@ -204,7 +205,7 @@ def artist(
 
         # Aggregate and emit result
         try:
-            payload = _aggregate_payload(name, n=min)
+            payload = _aggregate_payload(name, n=min, shuffle=shuffle)
         except HTTPException as e:
             yield _line({"type": "error", "message": e.detail})
             return

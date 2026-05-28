@@ -25,6 +25,7 @@ function ArtistPageInner() {
   const urlName = params.get("name") ?? "";
   const urlMin = Math.max(1, Math.min(100, parseInt(params.get("min") ?? "20") || 20));
   const urlPreferCache = params.get("prefer_cache") !== "0"; // default true
+  const urlShuffle = params.get("shuffle") ?? "";
 
   const [name, setName] = useState(urlName);
   const [minText, setMinText] = useState(String(urlMin));
@@ -37,42 +38,45 @@ function ArtistPageInner() {
 
   const lastKey = useRef<string>("");
 
-  const run = useCallback(async (n: string, m: number, pc: boolean) => {
-    if (!n) return;
-    setLoading(true);
-    setError(null);
-    setProgress(null);
-    try {
-      const a = await streamArtist(n, m, pc, {
-        onProgress: (p) => setProgress(p),
-      });
-      setData(a);
+  const run = useCallback(
+    async (n: string, m: number, pc: boolean, sh: string) => {
+      if (!n) return;
+      setLoading(true);
+      setError(null);
       setProgress(null);
-      saveLastArtist({ name: n, min: m, preferCache: pc });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setData(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      try {
+        const a = await streamArtist(n, m, pc, sh, {
+          onProgress: (p) => setProgress(p),
+        });
+        setData(a);
+        setProgress(null);
+        saveLastArtist({ name: n, min: m, preferCache: pc });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        setData(null);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (urlName) {
-      const key = `${urlName}|${urlMin}|${urlPreferCache}`;
+      const key = `${urlName}|${urlMin}|${urlPreferCache}|${urlShuffle}`;
       if (key === lastKey.current) return;
       lastKey.current = key;
       setName(urlName);
       setMinText(String(urlMin));
       setPreferCache(urlPreferCache);
-      run(urlName, urlMin, urlPreferCache);
+      run(urlName, urlMin, urlPreferCache, urlShuffle);
       return;
     }
     if (lastKey.current) return;
     const last = loadLastArtist();
     if (last) {
       const pc = last.preferCache ?? true;
-      lastKey.current = `${last.name}|${last.min}|${pc}`;
+      lastKey.current = `${last.name}|${last.min}|${pc}|`;
       setName(last.name);
       setMinText(String(last.min));
       setPreferCache(pc);
@@ -82,17 +86,20 @@ function ArtistPageInner() {
         prefer_cache: pc ? "1" : "0",
       }).toString();
       router.replace(`/artist?${q}`);
-      run(last.name, last.min, pc);
+      run(last.name, last.min, pc, ""); // stable on restore — no shuffle
     }
-  }, [urlName, urlMin, urlPreferCache, run, router]);
+  }, [urlName, urlMin, urlPreferCache, urlShuffle, run, router]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name) return;
+    // Fresh shuffle token on every Examine click → new random sample.
+    const shuffle = Math.random().toString(36).slice(2, 10);
     const q = new URLSearchParams({
       name,
       min: String(min),
       prefer_cache: preferCache ? "1" : "0",
+      shuffle,
     }).toString();
     router.push(`/artist?${q}`);
   }

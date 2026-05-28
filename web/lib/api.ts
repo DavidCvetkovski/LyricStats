@@ -43,6 +43,7 @@ export async function streamArtist(
   name: string,
   min: number,
   preferCache: boolean,
+  shuffle: string,
   handlers: ArtistStreamHandlers = {},
 ): Promise<ArtistPayload> {
   const q = new URLSearchParams({
@@ -50,6 +51,7 @@ export async function streamArtist(
     min: String(min),
     prefer_cache: preferCache ? "1" : "0",
   });
+  if (shuffle) q.set("shuffle", shuffle);
   const res = await fetch(`${BASE}/api/artist?${q.toString()}`, {
     signal: handlers.signal,
     cache: "no-store",
