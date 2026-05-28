@@ -201,7 +201,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
           size="lg"
         />
         <StatFigure
-          label="Avg. vocab richness"
+          label="Avg. word variety"
           value={`${(s.avg_ttr * 100).toFixed(1)}%`}
           size="lg"
         />
@@ -228,9 +228,9 @@ function ArtistView({ data }: { data: ArtistPayload }) {
           )}
           {s.richest_song?.title && (
             <Highlight
-              label="Richest vocabulary"
+              label="Widest vocabulary"
               title={s.richest_song.title}
-              detail={`${((s.richest_song.ttr ?? 0) * 100).toFixed(1)}% TTR`}
+              detail={`${((s.richest_song.ttr ?? 0) * 100).toFixed(1)}% variety`}
             />
           )}
           {s.shortest_song?.title && (
@@ -270,7 +270,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
               <Mini label="words" value={song.word_count.toLocaleString()} />
               <Mini label="unique" value={song.unique_words.toLocaleString()} />
               <Mini
-                label="ttr"
+                label="variety"
                 value={`${(song.type_token_ratio * 100).toFixed(0)}%`}
               />
             </div>

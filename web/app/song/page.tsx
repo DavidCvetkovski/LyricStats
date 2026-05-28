@@ -184,9 +184,9 @@ function SongView({ song }: { song: SongPayload }) {
           size="lg"
         />
         <StatFigure
-          label="Vocab Richness"
+          label="Word Variety"
           value={`${(s.type_token_ratio * 100).toFixed(1)}%`}
-          caption="unique ÷ total"
+          caption="distinct words ÷ total words"
           size="lg"
         />
         <StatFigure
