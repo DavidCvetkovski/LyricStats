@@ -23,11 +23,11 @@ function ArtistPageInner() {
   const params = useSearchParams();
 
   const urlName = params.get("name") ?? "";
-  const urlMax = Math.max(1, Math.min(100, parseInt(params.get("max") ?? "20") || 20));
+  const urlMin = Math.max(1, Math.min(100, parseInt(params.get("min") ?? "20") || 20));
 
   const [name, setName] = useState(urlName);
-  const [maxText, setMaxText] = useState(String(urlMax));
-  const max = clampMax(maxText);
+  const [minText, setMinText] = useState(String(urlMin));
+  const min = clampMin(minText);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<ArtistProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +46,7 @@ function ArtistPageInner() {
       });
       setData(a);
       setProgress(null);
-      saveLastArtist({ name: n, max: m });
+      saveLastArtist({ name: n, min: m });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setData(null);
@@ -57,33 +57,33 @@ function ArtistPageInner() {
 
   useEffect(() => {
     if (urlName) {
-      const key = `${urlName}|${urlMax}`;
+      const key = `${urlName}|${urlMin}`;
       if (key === lastKey.current) return;
       lastKey.current = key;
       setName(urlName);
-      setMaxText(String(urlMax));
-      run(urlName, urlMax);
+      setMinText(String(urlMin));
+      run(urlName, urlMin);
       return;
     }
     if (lastKey.current) return;
     const last = loadLastArtist();
     if (last) {
-      lastKey.current = `${last.name}|${last.max}`;
+      lastKey.current = `${last.name}|${last.min}`;
       setName(last.name);
-      setMaxText(String(last.max));
+      setMinText(String(last.min));
       const q = new URLSearchParams({
         name: last.name,
-        max: String(last.max),
+        min: String(last.min),
       }).toString();
       router.replace(`/artist?${q}`);
-      run(last.name, last.max);
+      run(last.name, last.min);
     }
-  }, [urlName, urlMax, run, router]);
+  }, [urlName, urlMin, run, router]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name) return;
-    const q = new URLSearchParams({ name, max: String(max) }).toString();
+    const q = new URLSearchParams({ name, min: String(min) }).toString();
     router.push(`/artist?${q}`);
   }
 
@@ -120,9 +120,9 @@ function ArtistPageInner() {
             inputMode="numeric"
             min={1}
             max={100}
-            value={maxText}
-            onChange={(e) => setMaxText(e.target.value)}
-            onBlur={() => setMaxText(String(clampMax(maxText)))}
+            value={minText}
+            onChange={(e) => setMinText(e.target.value)}
+            onBlur={() => setMinText(String(clampMin(minText)))}
           />
         </label>
         <button type="submit" className="pill" disabled={loading}>
@@ -313,7 +313,7 @@ function titleCase(s: string): string {
 }
 
 /** Parse a possibly-empty text value into a 1..100 song count, defaulting to 20. */
-function clampMax(text: string): number {
+function clampMin(text: string): number {
   const n = parseInt(text || "20", 10);
   if (Number.isNaN(n)) return 20;
   return Math.max(1, Math.min(100, n));
