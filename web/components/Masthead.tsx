@@ -10,52 +10,64 @@ export function Masthead() {
 
   return (
     <header className="border-b border-rule-strong">
-      <div className="mx-auto max-w-6xl px-6 pt-6 pb-8">
-        {/* Top folio strip — vol · nav · est */}
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-6 text-[0.7rem] uppercase tracking-[0.18em] text-ink-mute">
-          <span className="justify-self-start">
-            Vol. I · No. 1
-            <span className="hidden md:inline">
-              <span className="mx-2 text-rule-strong">|</span>
-              {today}
+      <div className="mx-auto max-w-6xl px-6 pt-7 pb-7">
+        <div className="grid items-end gap-y-6 sm:gap-y-4 sm:grid-cols-[1fr_auto_1fr]">
+          {/* Left rail — meta */}
+          <div className="hidden sm:flex flex-col text-[0.7rem] uppercase tracking-[0.18em] text-ink-mute leading-relaxed self-end">
+            <span className="text-ink">Vol. I · No. 1</span>
+            <span>{today}</span>
+            <span className="italic normal-case tracking-normal text-[0.78rem] text-ink-soft mt-1 font-serif">
+              A statistical review of popular lyrics
             </span>
-          </span>
+          </div>
 
-          <nav className="justify-self-center flex items-center gap-4 sm:gap-5 text-ink whitespace-nowrap">
+          {/* Wordmark */}
+          <Link
+            href="/"
+            className="block text-center justify-self-center"
+            aria-label="LyricStats — home"
+          >
+            <h1
+              className="display text-ink leading-[0.88]"
+              style={{
+                fontSize: "clamp(3.25rem, 9vw, 6.5rem)",
+                fontVariationSettings: '"opsz" 144, "SOFT" 50',
+              }}
+            >
+              LyricStats
+            </h1>
+          </Link>
+
+          {/* Right rail — nav */}
+          <nav className="hidden sm:flex flex-col items-end gap-1 text-[0.72rem] uppercase tracking-[0.16em] self-end">
             <Link href="/" className="hover:text-accent transition-colors">
               Front Page
             </Link>
-            <span aria-hidden className="text-rule-strong">·</span>
             <Link href="/song" className="hover:text-accent transition-colors">
               On a Song
             </Link>
-            <span aria-hidden className="text-rule-strong">·</span>
             <Link href="/artist" className="hover:text-accent transition-colors">
               The Artist
             </Link>
+            <span className="text-ink-mute text-[0.65rem] mt-1 normal-case tracking-normal italic font-serif">
+              Established 2026
+            </span>
           </nav>
-
-          <span className="justify-self-end">Established 2026</span>
         </div>
 
-        {/* Wordmark */}
-        <Link href="/" className="block mt-6 text-center group">
-          <h1
-            className="display text-ink leading-[0.9]"
-            style={{
-              fontSize: "clamp(3rem, 8vw, 6rem)",
-              // less dramatic optical size + softer terminals so the 'y' descender
-              // doesn't read as quite so heavy beneath the title
-              fontVariationSettings: '"opsz" 144, "SOFT" 50',
-            }}
-          >
-            LyricStats
-          </h1>
-          <p className="smallcaps mt-5 text-[0.68rem]">
-            A Quarterly Statistical Review of Popular Lyrics
-          </p>
-        </Link>
+        {/* Mobile fallback — single small-caps row under the title */}
+        <div className="sm:hidden mt-5 flex items-center justify-between text-[0.65rem] uppercase tracking-[0.16em] text-ink-mute">
+          <span>{today}</span>
+          <nav className="flex gap-3 text-ink">
+            <Link href="/" className="hover:text-accent">Front</Link>
+            <Link href="/song" className="hover:text-accent">Song</Link>
+            <Link href="/artist" className="hover:text-accent">Artist</Link>
+          </nav>
+        </div>
       </div>
+
+      {/* Double rule under masthead, like a broadsheet */}
+      <div className="h-[3px] border-y border-rule-strong bg-paper"></div>
     </header>
   );
 }
