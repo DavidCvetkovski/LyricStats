@@ -64,6 +64,7 @@ class SongStats:
 
     # structure
     section_kinds: dict[str, int] = field(default_factory=dict)
+    section_sequence: list[str] = field(default_factory=list)  # order, e.g. ["intro","verse","chorus","verse","chorus"]
     chorus_ratio: float = 0.0  # share of total lines that live in chorus sections
 
     # repetition
@@ -125,12 +126,15 @@ def compute(lyrics: str, *, top_n: int = 20, longest_n: int = 10) -> SongStats:
 
     # structure
     kinds: Counter[str] = Counter()
+    sequence: list[str] = []
     chorus_lines = 0
     for sec in sections:
         kinds[sec.kind] += 1
+        sequence.append(sec.kind)
         if sec.kind in {"chorus", "hook", "refrain"}:
             chorus_lines += len(sec.lines)
     stats.section_kinds = dict(kinds)
+    stats.section_sequence = sequence
     stats.chorus_ratio = round(chorus_lines / stats.line_count, 4) if stats.line_count else 0.0
 
     # repetition (line-level)

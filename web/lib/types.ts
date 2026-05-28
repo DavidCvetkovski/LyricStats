@@ -16,6 +16,7 @@ export type SongStats = {
   top_words: [string, number][];
   top_words_no_stop: [string, number][];
   section_kinds: Record<string, number>;
+  section_sequence: string[];
   chorus_ratio: number;
   repetition_ratio: number;
   language_mix: Record<string, number>;

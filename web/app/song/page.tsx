@@ -7,6 +7,7 @@ import type { SongPayload } from "@/lib/types";
 import { StatFigure } from "@/components/StatFigure";
 import { WordTable } from "@/components/WordTable";
 import { PullQuote } from "@/components/PullQuote";
+import { loadLastSong, saveLastSong } from "@/lib/lastSearch";
 
 export default function SongPage() {
   return (
@@ -38,6 +39,7 @@ function SongPageInner() {
     try {
       const s = await getSong(a, t);
       setSong(s);
+      saveLastSong({ artist: a, title: t });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setSong(null);
@@ -46,16 +48,28 @@ function SongPageInner() {
     }
   }, []);
 
-  // Auto-load whenever URL has both params (initial mount + back/forward nav)
+  // Auto-load when URL has params; else restore from localStorage.
   useEffect(() => {
-    const key = `${urlArtist}${urlTitle}`;
-    if (!urlArtist || !urlTitle) return;
-    if (key === lastKey.current) return;
-    lastKey.current = key;
-    setArtist(urlArtist);
-    setTitle(urlTitle);
-    run(urlArtist, urlTitle);
-  }, [urlArtist, urlTitle, run]);
+    if (urlArtist && urlTitle) {
+      const key = `${urlArtist}|${urlTitle}`;
+      if (key === lastKey.current) return;
+      lastKey.current = key;
+      setArtist(urlArtist);
+      setTitle(urlTitle);
+      run(urlArtist, urlTitle);
+      return;
+    }
+    if (lastKey.current) return;
+    const last = loadLastSong();
+    if (last) {
+      lastKey.current = `${last.artist}|${last.title}`;
+      setArtist(last.artist);
+      setTitle(last.title);
+      const q = new URLSearchParams({ artist: last.artist, title: last.title }).toString();
+      router.replace(`/song?${q}`);
+      run(last.artist, last.title);
+    }
+  }, [urlArtist, urlTitle, run, router]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -208,20 +222,24 @@ function SongView({ song }: { song: SongPayload }) {
             </p>
           </div>
 
-          {Object.keys(s.section_kinds).length > 0 && (
+          {s.section_sequence.length > 0 && (
             <div>
               <p className="smallcaps mb-3">Architecture</p>
-              <ul className="space-y-2">
-                {Object.entries(s.section_kinds).map(([kind, n]) => (
-                  <li
-                    key={kind}
-                    className="flex justify-between border-b border-rule py-1"
-                  >
-                    <span className="font-serif italic">{kind}</span>
-                    <span className="figure">{n}</span>
-                  </li>
+              <p className="font-serif text-xl leading-relaxed text-ink">
+                {s.section_sequence.map((kind, i) => (
+                  <span key={i}>
+                    <span className="italic">{kind}</span>
+                    {i < s.section_sequence.length - 1 && (
+                      <span className="text-accent mx-2" aria-hidden>
+                        ·
+                      </span>
+                    )}
+                  </span>
                 ))}
-              </ul>
+              </p>
+              <p className="mt-2 text-[0.78rem] italic text-ink-mute">
+                the order, from first to last
+              </p>
             </div>
           )}
         </div>
