@@ -24,10 +24,12 @@ function ArtistPageInner() {
 
   const urlName = params.get("name") ?? "";
   const urlMin = Math.max(1, Math.min(100, parseInt(params.get("min") ?? "20") || 20));
+  const urlPreferCache = params.get("prefer_cache") !== "0"; // default true
 
   const [name, setName] = useState(urlName);
   const [minText, setMinText] = useState(String(urlMin));
   const min = clampMin(minText);
+  const [preferCache, setPreferCache] = useState(urlPreferCache);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<ArtistProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,18 +37,18 @@ function ArtistPageInner() {
 
   const lastKey = useRef<string>("");
 
-  const run = useCallback(async (n: string, m: number) => {
+  const run = useCallback(async (n: string, m: number, pc: boolean) => {
     if (!n) return;
     setLoading(true);
     setError(null);
     setProgress(null);
     try {
-      const a = await streamArtist(n, m, {
+      const a = await streamArtist(n, m, pc, {
         onProgress: (p) => setProgress(p),
       });
       setData(a);
       setProgress(null);
-      saveLastArtist({ name: n, min: m });
+      saveLastArtist({ name: n, min: m, preferCache: pc });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setData(null);
@@ -57,33 +59,41 @@ function ArtistPageInner() {
 
   useEffect(() => {
     if (urlName) {
-      const key = `${urlName}|${urlMin}`;
+      const key = `${urlName}|${urlMin}|${urlPreferCache}`;
       if (key === lastKey.current) return;
       lastKey.current = key;
       setName(urlName);
       setMinText(String(urlMin));
-      run(urlName, urlMin);
+      setPreferCache(urlPreferCache);
+      run(urlName, urlMin, urlPreferCache);
       return;
     }
     if (lastKey.current) return;
     const last = loadLastArtist();
     if (last) {
-      lastKey.current = `${last.name}|${last.min}`;
+      const pc = last.preferCache ?? true;
+      lastKey.current = `${last.name}|${last.min}|${pc}`;
       setName(last.name);
       setMinText(String(last.min));
+      setPreferCache(pc);
       const q = new URLSearchParams({
         name: last.name,
         min: String(last.min),
+        prefer_cache: pc ? "1" : "0",
       }).toString();
       router.replace(`/artist?${q}`);
-      run(last.name, last.min);
+      run(last.name, last.min, pc);
     }
-  }, [urlName, urlMin, run, router]);
+  }, [urlName, urlMin, urlPreferCache, run, router]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name) return;
-    const q = new URLSearchParams({ name, min: String(min) }).toString();
+    const q = new URLSearchParams({
+      name,
+      min: String(min),
+      prefer_cache: preferCache ? "1" : "0",
+    }).toString();
     router.push(`/artist?${q}`);
   }
 
@@ -128,6 +138,28 @@ function ArtistPageInner() {
         <button type="submit" className="pill" disabled={loading}>
           {loading ? "Filing…" : "Examine →"}
         </button>
+
+        {/* Editorial source toggle — small caps + a thin underline state */}
+        <div className="sm:col-span-3 flex items-center gap-3 pt-1">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={preferCache}
+            onClick={() => setPreferCache((v) => !v)}
+            className="group inline-flex items-center gap-2 text-[0.72rem] uppercase tracking-[0.18em] text-ink hover:text-accent transition-colors"
+          >
+            <span
+              className={`inline-block w-3.5 h-3.5 border border-ink-soft transition-all ${
+                preferCache ? "bg-ink" : "bg-paper"
+              }`}
+              aria-hidden
+            />
+            Prefer the archive
+          </button>
+          <span className="text-[0.72rem] italic font-serif text-ink-mute">
+            — use what we already have on file
+          </span>
+        </div>
       </form>
 
       {loading && progress && (
@@ -174,6 +206,11 @@ function ArtistView({ data }: { data: ArtistPayload }) {
           {s.song_count} songs · {s.total_words.toLocaleString()} words ·{" "}
           {s.total_unique_words.toLocaleString()} distinct
         </p>
+        {data.cached_total > data.sampled && (
+          <p className="mt-2 text-[0.78rem] italic text-ink-mute">
+            a random sample of {data.sampled} drawn from {data.cached_total} on file
+          </p>
+        )}
         {data.genius_url && (
           <p className="mt-3 text-[0.78rem] smallcaps">
             <a

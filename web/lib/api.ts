@@ -42,9 +42,14 @@ export type ArtistStreamHandlers = {
 export async function streamArtist(
   name: string,
   min: number,
+  preferCache: boolean,
   handlers: ArtistStreamHandlers = {},
 ): Promise<ArtistPayload> {
-  const q = new URLSearchParams({ name, min: String(min) });
+  const q = new URLSearchParams({
+    name,
+    min: String(min),
+    prefer_cache: preferCache ? "1" : "0",
+  });
   const res = await fetch(`${BASE}/api/artist?${q.toString()}`, {
     signal: handlers.signal,
     cache: "no-store",
