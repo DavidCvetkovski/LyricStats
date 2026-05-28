@@ -38,12 +38,11 @@ def _genius_client():
         GENIUS_TOKEN,
         timeout=15,
         retries=2,
+        sleep_time=0.4,
         remove_section_headers=False,  # we want [Chorus] etc. for section stats
         skip_non_songs=True,
         excluded_terms=["(Remix)", "(Live)"],
-        verbose=False,
     )
-    g.sleep_time = 0.4
     return g
 
 

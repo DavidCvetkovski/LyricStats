@@ -31,9 +31,25 @@ class Section:
 
     @property
     def kind(self) -> str:
-        """Coarse classification: chorus/verse/bridge/intro/outro/other."""
+        """Coarse classification: chorus/verse/bridge/intro/outro/other.
+
+        Recognises both English and BHS labels (Refren, Uvod, Strofa, etc.).
+        """
         n = self.name.lower()
-        for key in ("chorus", "verse", "bridge", "intro", "outro", "hook", "refrain", "pre-chorus"):
+        # BHS → EN mapping
+        bhs_map = {
+            "refren": "chorus",
+            "hook": "chorus",
+            "stih": "verse",
+            "strofa": "verse",
+            "uvod": "intro",
+            "kraj": "outro",
+            "most": "bridge",
+        }
+        for k, v in bhs_map.items():
+            if k in n:
+                return v
+        for key in ("chorus", "verse", "bridge", "intro", "outro", "refrain", "pre-chorus"):
             if key in n:
                 return key
         return "other"
@@ -53,6 +69,11 @@ def clean_raw(raw: str) -> str:
     return text.strip()
 
 
+_TITLE_MARKER_RE = re.compile(
+    r"^(tekst pesme|tekst|lyrics for|.*lyrics)\b", re.IGNORECASE
+)
+
+
 def parse_sections(text: str) -> list[Section]:
     """Split lyrics into sections by [Header] markers."""
     text = clean_raw(text)
@@ -67,10 +88,15 @@ def parse_sections(text: str) -> list[Section]:
                 parts.append(current)
             current = Section(name=m.group(1).strip(), lines=[])
             continue
-        if line.strip():
-            current.lines.append(line.rstrip())
+        # Skip placeholder / unknown lines Genius sometimes leaves: "[?]"
+        stripped = line.strip()
+        if not stripped or stripped == "[?]":
+            continue
+        current.lines.append(line.rstrip())
     if current.lines:
         parts.append(current)
+    # Drop title-marker sections like [Tekst pesme "X"] or [Song Title Lyrics]
+    parts = [p for p in parts if not _TITLE_MARKER_RE.match(p.name)]
     return parts
 
 
