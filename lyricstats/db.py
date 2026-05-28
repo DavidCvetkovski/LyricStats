@@ -1,0 +1,158 @@
+"""SQLite cache for fetched lyrics and computed stats.
+
+Tables:
+  - Artist: one per artist name (case-insensitive key)
+  - Song:   one per (artist_id, title), holds lyrics + cached stats JSON
+"""
+
+from __future__ import annotations
+
+import json
+from datetime import datetime
+from typing import Optional
+
+from sqlmodel import Field, Session, SQLModel, create_engine, select
+
+from .config import DB_PATH
+
+
+class Artist(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True, unique=True)
+    genius_id: Optional[int] = Field(default=None, index=True)
+    fetched_at: Optional[datetime] = None
+    catalogue_fetched_at: Optional[datetime] = None
+
+
+class Song(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    artist_id: int = Field(foreign_key="artist.id", index=True)
+    title: str = Field(index=True)
+    album: Optional[str] = None
+    year: Optional[int] = None
+    genius_id: Optional[int] = Field(default=None, index=True)
+    lyrics: str = ""
+    stats_json: Optional[str] = None  # cached computed stats
+    fetched_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+_engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)
+SQLModel.metadata.create_all(_engine)
+
+
+def session() -> Session:
+    return Session(_engine)
+
+
+# ---- artist helpers --------------------------------------------------------
+
+
+def _norm(name: str) -> str:
+    return name.strip().lower()
+
+
+def get_or_create_artist(name: str, genius_id: int | None = None) -> Artist:
+    with session() as s:
+        row = s.exec(select(Artist).where(Artist.name == _norm(name))).first()
+        if row:
+            if genius_id and not row.genius_id:
+                row.genius_id = genius_id
+                s.add(row)
+                s.commit()
+                s.refresh(row)
+            return row
+        row = Artist(name=_norm(name), genius_id=genius_id)
+        s.add(row)
+        s.commit()
+        s.refresh(row)
+        return row
+
+
+def get_artist(name: str) -> Artist | None:
+    with session() as s:
+        return s.exec(select(Artist).where(Artist.name == _norm(name))).first()
+
+
+# ---- song helpers ----------------------------------------------------------
+
+
+def upsert_song(
+    artist: Artist,
+    title: str,
+    lyrics: str,
+    *,
+    album: str | None = None,
+    year: int | None = None,
+    genius_id: int | None = None,
+) -> Song:
+    with session() as s:
+        existing = s.exec(
+            select(Song).where(Song.artist_id == artist.id, Song.title == title)
+        ).first()
+        if existing:
+            existing.lyrics = lyrics
+            existing.album = album or existing.album
+            existing.year = year or existing.year
+            existing.genius_id = genius_id or existing.genius_id
+            existing.fetched_at = datetime.utcnow()
+            existing.stats_json = None  # invalidate cache
+            s.add(existing)
+            s.commit()
+            s.refresh(existing)
+            return existing
+        row = Song(
+            artist_id=artist.id,
+            title=title,
+            album=album,
+            year=year,
+            genius_id=genius_id,
+            lyrics=lyrics,
+        )
+        s.add(row)
+        s.commit()
+        s.refresh(row)
+        return row
+
+
+def find_song(artist_name: str, title: str) -> Song | None:
+    a = get_artist(artist_name)
+    if not a:
+        return None
+    with session() as s:
+        return s.exec(
+            select(Song).where(Song.artist_id == a.id, Song.title.ilike(title))  # type: ignore[attr-defined]
+        ).first()
+
+
+def list_songs(artist: Artist) -> list[Song]:
+    with session() as s:
+        return list(s.exec(select(Song).where(Song.artist_id == artist.id)).all())
+
+
+def save_stats(song: Song, stats: dict) -> None:
+    with session() as s:
+        row = s.get(Song, song.id)
+        if not row:
+            return
+        row.stats_json = json.dumps(stats, ensure_ascii=False)
+        s.add(row)
+        s.commit()
+
+
+def load_stats(song: Song) -> dict | None:
+    if not song.stats_json:
+        return None
+    try:
+        return json.loads(song.stats_json)
+    except json.JSONDecodeError:
+        return None
+
+
+def mark_catalogue_fetched(artist: Artist) -> None:
+    with session() as s:
+        row = s.get(Artist, artist.id)
+        if not row:
+            return
+        row.catalogue_fetched_at = datetime.utcnow()
+        s.add(row)
+        s.commit()
