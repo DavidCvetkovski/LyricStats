@@ -113,7 +113,7 @@ function ArtistPageInner() {
           />
         </label>
         <label className="block">
-          <span className="smallcaps mb-1 block">Songs at most</span>
+          <span className="smallcaps mb-1 block">Songs at least</span>
           <input
             className="field no-spin"
             type="number"
