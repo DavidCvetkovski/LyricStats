@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import queue
+import random
 import threading
 from typing import Any, Generator
 
@@ -80,14 +81,30 @@ def song(
 # ── artist (streaming) ─────────────────────────────────────────────────────
 
 
-def _aggregate_payload(name: str) -> dict[str, Any]:
+def _pick_n(songs: list[db.Song], n: int, seed_key: str) -> list[db.Song]:
+    """Deterministic random sample of N songs from the cached list.
+
+    Sorts the cache by title first so the choice is invariant to insertion
+    order (i.e. it doesn't drift when the cache grows). The seed key
+    incorporates the requested N, so different N for the same artist
+    yields a stable, distinct sample.
+    """
+    if n >= len(songs):
+        return songs
+    ordered = sorted(songs, key=lambda s: (s.title or "").lower())
+    rng = random.Random(seed_key)
+    return rng.sample(ordered, n)
+
+
+def _aggregate_payload(name: str, n: int) -> dict[str, Any]:
     a = db.get_artist(name)
     if not a:
         raise HTTPException(status_code=404, detail=f"No cached data for '{name}'.")
-    songs = db.list_songs(a)
-    if not songs:
+    all_songs = db.list_songs(a)
+    if not all_songs:
         raise HTTPException(status_code=404, detail=f"No songs for '{name}'.")
 
+    songs = _pick_n(all_songs, n, seed_key=f"{a.name}|{n}")
     pairs: list[tuple[str, str]] = []
     metas: list[dict[str, Any]] = []
     for s in songs:
@@ -118,6 +135,8 @@ def _aggregate_payload(name: str) -> dict[str, Any]:
         "genius_url": a.genius_url,
         "songs": metas,
         "stats": agg.to_dict(),
+        "cached_total": len(all_songs),
+        "sampled": len(songs),
     }
 
 
@@ -129,16 +148,26 @@ def _line(obj: dict[str, Any]) -> bytes:
 def artist(
     name: str = Query(..., min_length=1),
     min: int = Query(20, ge=1, le=100, alias="min"),
+    prefer_cache: bool = Query(True),
 ) -> StreamingResponse:
     """Stream NDJSON: zero or more `{type:"progress"}` events, then exactly
     one terminal `{type:"result"}` or `{type:"error"}`.
+
+    If `prefer_cache` is true (default) and the cache already holds at
+    least `min` songs for the artist, return a deterministic random
+    sample of N from the cache with no Genius fetch. Otherwise, fetch
+    until we have at least `min` and then return a sample of N.
     """
 
     def gen() -> Generator[bytes, None, None]:
         existing = db.get_artist(name)
-        has_cache = existing is not None and bool(db.list_songs(existing))
+        cached_songs = db.list_songs(existing) if existing else []
+        cache_has_enough = len(cached_songs) >= min
 
-        if not has_cache:
+        # Decide whether we need to hit Genius at all.
+        needs_fetch = not (prefer_cache and cache_has_enough)
+
+        if needs_fetch:
             # Fetch with progress in a worker thread, drain a queue here.
             events: queue.Queue[dict[str, Any]] = queue.Queue()
 
@@ -175,7 +204,7 @@ def artist(
 
         # Aggregate and emit result
         try:
-            payload = _aggregate_payload(name)
+            payload = _aggregate_payload(name, n=min)
         except HTTPException as e:
             yield _line({"type": "error", "message": e.detail})
             return

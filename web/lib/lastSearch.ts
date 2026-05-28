@@ -8,7 +8,7 @@ const SONG_KEY = "lyricstats:last-song";
 const ARTIST_KEY = "lyricstats:last-artist";
 
 export type LastSong = { artist: string; title: string };
-export type LastArtist = { name: string; min: number };
+export type LastArtist = { name: string; min: number; preferCache?: boolean };
 
 export function saveLastSong(v: LastSong): void {
   try {

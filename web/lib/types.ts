@@ -65,4 +65,6 @@ export type ArtistPayload = {
   genius_url: string | null;
   songs: SongMeta[];
   stats: ArtistStats;
+  cached_total: number;
+  sampled: number;
 };

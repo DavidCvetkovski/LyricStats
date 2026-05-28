@@ -8,8 +8,9 @@ from __future__ import annotations
 import logging
 import re
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable, Iterator
 
 import requests
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -46,6 +47,65 @@ def _album_name(obj: Any) -> str | None:
     if isinstance(album, str):
         return album
     return getattr(album, "name", None)
+
+
+# ── live progress via lyricsgenius's own logger ────────────────────────────
+#
+# lyricsgenius.search_artist is a single blocking call that fetches songs
+# one at a time. Our own loop only runs after it finishes, so the progress
+# callback never moves during the slow part. lyricsgenius does log each
+# fetch at INFO level ("Song 5: 'Title'"), so we attach a temporary logging
+# handler that turns those messages into real progress events.
+
+_LG_SONG_RE = re.compile(r'^\s*Song\s+(\d+):\s*"(.+)"\s*$')
+
+
+class _LyricsGeniusProgressHandler(logging.Handler):
+    def __init__(
+        self,
+        on_progress: Callable[[int, int, str], None],
+        total: int,
+    ) -> None:
+        super().__init__(level=logging.INFO)
+        self.on_progress = on_progress
+        self.total = total
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = record.getMessage()
+            m = _LG_SONG_RE.match(msg)
+            if not m:
+                return
+            n = int(m.group(1))
+            title = m.group(2).strip()
+            # Cap the displayed count at the user's requested minimum so the
+            # buffer fetches at the tail don't push the bar past 100%.
+            self.on_progress(min(n, self.total), self.total, title)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+@contextmanager
+def _lyricsgenius_progress(
+    on_progress: Callable[[int, int, str], None] | None,
+    total: int,
+) -> Iterator[None]:
+    if on_progress is None:
+        yield
+        return
+    log = logging.getLogger("lyricsgenius.genius")
+    prev_level = log.level
+    # Ensure the logger actually emits records to our handler.
+    if prev_level == logging.NOTSET or prev_level > logging.INFO:
+        log.setLevel(logging.INFO)
+    handler = _LyricsGeniusProgressHandler(on_progress, total)
+    log.addHandler(handler)
+    try:
+        yield
+    finally:
+        log.removeHandler(handler)
+        if prev_level != log.level:
+            log.setLevel(prev_level)
 
 
 def _song_year(obj: Any) -> int | None:
@@ -208,7 +268,10 @@ def fetch_artist_catalogue(
     """
     # Ask Genius for a buffered amount so skips don't undercount us.
     request = min(int(min_songs * 1.3) + 5, hard_cap)
-    artist_obj = _genius_search_artist(name, max_songs=request)
+    # While the slow Genius scrape is happening, hook its logger so we
+    # can emit a real-time progress event for every song it pulls.
+    with _lyricsgenius_progress(progress, total=min_songs):
+        artist_obj = _genius_search_artist(name, max_songs=request)
     if artist_obj is None:
         raise FetchError(f"Artist '{name}' not found on Genius.")
 
@@ -228,12 +291,12 @@ def fetch_artist_catalogue(
     if not with_lyrics:
         return 0
 
+    # Saving to SQLite is essentially instant — no per-song progress here,
+    # the live progress was emitted by the logger hook above during fetch.
     saved = 0
     for song in with_lyrics:
         if saved >= min_songs and saved >= target:
             break
-        if progress:
-            progress(saved + 1, max(target, min_songs), song.title)
         db.upsert_song(
             a,
             title=song.title,
@@ -243,7 +306,11 @@ def fetch_artist_catalogue(
             genius_id=_id_from_api_path(song),
         )
         saved += 1
-        time.sleep(0.2)
+
+    # Make sure the bar lands on 100% at the end even if logger parsing
+    # dropped the last event (different lyricsgenius versions vary slightly).
+    if progress:
+        progress(min_songs, min_songs, "done")
 
     db.mark_catalogue_fetched(a)
     return saved
