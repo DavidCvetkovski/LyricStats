@@ -164,7 +164,10 @@ def fetch_song(artist: str, title: str, *, force: bool = False) -> FetchedSong:
     if song and song.lyrics:
         primary = getattr(song, "primary_artist", None)
         artist_genius_id = _id_from_api_path(primary) if primary else None
-        a = db.get_or_create_artist(artist, genius_id=artist_genius_id)
+        artist_url = getattr(primary, "url", None) if primary else None
+        a = db.get_or_create_artist(
+            artist, genius_id=artist_genius_id, genius_url=artist_url
+        )
         row = db.upsert_song(
             a,
             title=song.title,
@@ -199,7 +202,11 @@ def fetch_artist_catalogue(
     if artist_obj is None:
         raise FetchError(f"Artist '{name}' not found on Genius.")
 
-    a = db.get_or_create_artist(artist_obj.name, genius_id=_id_from_api_path(artist_obj))
+    a = db.get_or_create_artist(
+        artist_obj.name,
+        genius_id=_id_from_api_path(artist_obj),
+        genius_url=getattr(artist_obj, "url", None),
+    )
     songs = artist_obj.songs or []
     total = len(songs)
     saved = 0

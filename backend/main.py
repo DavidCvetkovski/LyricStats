@@ -113,7 +113,12 @@ def _aggregate_payload(name: str) -> dict[str, Any]:
         )
 
     agg = stats.aggregate(pairs)
-    return {"name": a.name, "songs": metas, "stats": agg.to_dict()}
+    return {
+        "name": a.name,
+        "genius_url": a.genius_url,
+        "songs": metas,
+        "stats": agg.to_dict(),
+    }
 
 
 def _line(obj: dict[str, Any]) -> bytes:

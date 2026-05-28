@@ -62,6 +62,7 @@ export type ArtistStats = {
 
 export type ArtistPayload = {
   name: string;
+  genius_url: string | null;
   songs: SongMeta[];
   stats: ArtistStats;
 };

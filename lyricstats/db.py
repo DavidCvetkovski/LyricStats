@@ -20,6 +20,7 @@ class Artist(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
     genius_id: Optional[int] = Field(default=None, index=True)
+    genius_url: Optional[str] = None  # canonical Genius web URL, for disambiguation
     fetched_at: Optional[datetime] = None
     catalogue_fetched_at: Optional[datetime] = None
 
@@ -40,6 +41,20 @@ _engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)
 SQLModel.metadata.create_all(_engine)
 
 
+def _migrate() -> None:
+    """Idempotent column additions for tables created by older versions."""
+    from sqlalchemy import text  # noqa: PLC0415
+
+    with _engine.begin() as conn:
+        # Inspect existing columns and add any that are missing.
+        existing = {row[1] for row in conn.execute(text("PRAGMA table_info(artist)"))}
+        if "genius_url" not in existing:
+            conn.execute(text("ALTER TABLE artist ADD COLUMN genius_url VARCHAR"))
+
+
+_migrate()
+
+
 def session() -> Session:
     return Session(_engine)
 
@@ -51,17 +66,27 @@ def _norm(name: str) -> str:
     return name.strip().lower()
 
 
-def get_or_create_artist(name: str, genius_id: int | None = None) -> Artist:
+def get_or_create_artist(
+    name: str,
+    genius_id: int | None = None,
+    genius_url: str | None = None,
+) -> Artist:
     with session() as s:
         row = s.exec(select(Artist).where(Artist.name == _norm(name))).first()
         if row:
+            dirty = False
             if genius_id and not row.genius_id:
                 row.genius_id = genius_id
+                dirty = True
+            if genius_url and not row.genius_url:
+                row.genius_url = genius_url
+                dirty = True
+            if dirty:
                 s.add(row)
                 s.commit()
                 s.refresh(row)
             return row
-        row = Artist(name=_norm(name), genius_id=genius_id)
+        row = Artist(name=_norm(name), genius_id=genius_id, genius_url=genius_url)
         s.add(row)
         s.commit()
         s.refresh(row)

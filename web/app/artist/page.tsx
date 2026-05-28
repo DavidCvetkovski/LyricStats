@@ -26,7 +26,8 @@ function ArtistPageInner() {
   const urlMax = Math.max(1, Math.min(100, parseInt(params.get("max") ?? "20") || 20));
 
   const [name, setName] = useState(urlName);
-  const [max, setMax] = useState(urlMax);
+  const [maxText, setMaxText] = useState(String(urlMax));
+  const max = clampMax(maxText);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<ArtistProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +61,7 @@ function ArtistPageInner() {
       if (key === lastKey.current) return;
       lastKey.current = key;
       setName(urlName);
-      setMax(urlMax);
+      setMaxText(String(urlMax));
       run(urlName, urlMax);
       return;
     }
@@ -69,7 +70,7 @@ function ArtistPageInner() {
     if (last) {
       lastKey.current = `${last.name}|${last.max}`;
       setName(last.name);
-      setMax(last.max);
+      setMaxText(String(last.max));
       const q = new URLSearchParams({
         name: last.name,
         max: String(last.max),
@@ -119,8 +120,9 @@ function ArtistPageInner() {
             inputMode="numeric"
             min={1}
             max={100}
-            value={max}
-            onChange={(e) => setMax(parseInt(e.target.value || "20") || 20)}
+            value={maxText}
+            onChange={(e) => setMaxText(e.target.value)}
+            onBlur={() => setMaxText(String(clampMax(maxText)))}
           />
         </label>
         <button type="submit" className="pill" disabled={loading}>
@@ -172,6 +174,18 @@ function ArtistView({ data }: { data: ArtistPayload }) {
           {s.song_count} songs · {s.total_words.toLocaleString()} words ·{" "}
           {s.total_unique_words.toLocaleString()} distinct
         </p>
+        {data.genius_url && (
+          <p className="mt-3 text-[0.78rem] smallcaps">
+            <a
+              href={data.genius_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-accent transition-colors underline decoration-rule-strong underline-offset-4 hover:decoration-accent"
+            >
+              wrong artist? · view on Genius ↗
+            </a>
+          </p>
+        )}
       </header>
 
       {s.top_words_no_stop[0] && (
@@ -296,4 +310,11 @@ function Mini({ label, value }: { label: string; value: string }) {
 
 function titleCase(s: string): string {
   return s.replace(/\w\S*/g, (t) => t[0].toUpperCase() + t.slice(1).toLowerCase());
+}
+
+/** Parse a possibly-empty text value into a 1..100 song count, defaulting to 20. */
+function clampMax(text: string): number {
+  const n = parseInt(text || "20", 10);
+  if (Number.isNaN(n)) return 20;
+  return Math.max(1, Math.min(100, n));
 }
