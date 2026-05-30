@@ -2,18 +2,18 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <article className="mx-auto max-w-6xl px-6 pt-10 pb-20">
+    <article className="mx-auto max-w-6xl px-4 sm:px-6 pt-8 sm:pt-10 pb-16 sm:pb-20">
       {/* Front-page lede */}
-      <section className="grid gap-10 lg:grid-cols-[1.4fr_1fr] lg:gap-16 border-b border-rule-strong pb-12">
+      <section className="grid gap-8 sm:gap-10 lg:grid-cols-[1.4fr_1fr] lg:gap-16 border-b border-rule-strong pb-10 sm:pb-12">
         <div className="rise rise-1">
           <p className="smallcaps mb-3">The Feature</p>
           <h2
             className="display text-ink"
-            style={{ fontSize: "clamp(2.5rem, 6vw, 4.5rem)" }}
+            style={{ fontSize: "clamp(2rem, 8vw, 4.5rem)" }}
           >
             What can a&nbsp;number tell you about a&nbsp;song?
           </h2>
-          <p className="mt-6 dropcap text-lg leading-[1.7] text-ink-soft max-w-prose">
+          <p className="mt-5 sm:mt-6 dropcap text-base sm:text-lg leading-[1.65] sm:leading-[1.7] text-ink-soft max-w-prose">
             Every song is a small library of vocabulary, rhythm and repetition. We
             count the words, the rhymes and the choruses; we measure the
             silence between them. What emerges is a quiet portrait of a writer at
@@ -58,7 +58,7 @@ export default function Home() {
       </section>
 
       {/* Three-column "what's inside" */}
-      <section className="mt-14 grid gap-12 md:grid-cols-3">
+      <section className="mt-10 sm:mt-14 grid gap-10 sm:gap-12 md:grid-cols-3">
         <Column
           numeral="I."
           title="Lexicon"
@@ -77,9 +77,9 @@ export default function Home() {
       </section>
 
       {/* Method */}
-      <section className="mt-20 border-t border-rule-strong pt-10">
+      <section className="mt-16 sm:mt-20 border-t border-rule-strong pt-8 sm:pt-10">
         <p className="smallcaps mb-3">On Method</p>
-        <p className="font-serif text-2xl sm:text-3xl text-ink leading-snug max-w-3xl">
+        <p className="font-serif text-xl sm:text-2xl md:text-3xl text-ink leading-snug max-w-3xl">
           Lyrics are retrieved from Genius (with a quiet fallback), filed away
           in a small database, and counted with care. Statistics are computed in
           Python; the page you are reading is rendered in&nbsp;React.

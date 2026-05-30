@@ -9,6 +9,8 @@ import { WordTable } from "@/components/WordTable";
 import { PullQuote } from "@/components/PullQuote";
 import { ProgressLine } from "@/components/ProgressLine";
 import { loadLastArtist, saveLastArtist } from "@/lib/lastSearch";
+import { friendlyError, type FriendlyError } from "@/lib/errors";
+import { ErrorNote } from "@/components/ErrorNote";
 
 export default function ArtistPage() {
   return (
@@ -35,7 +37,7 @@ function ArtistPageInner() {
   const [forceFetch, setForceFetch] = useState(urlForceFetch);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<ArtistProgress | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FriendlyError | null>(null);
   const [data, setData] = useState<ArtistPayload | null>(null);
 
   const lastKey = useRef<string>("");
@@ -54,7 +56,7 @@ function ArtistPageInner() {
         setProgress(null);
         saveLastArtist({ name: n, min: m, preferCache: !fresh });
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        setError(friendlyError(err));
         setData(null);
       } finally {
         setLoading(false);
@@ -110,18 +112,23 @@ function ArtistPageInner() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-6 pt-10 pb-20">
-      <header className="border-b border-rule-strong pb-8">
+    <div className="mx-auto max-w-6xl px-4 sm:px-6 pt-8 sm:pt-10 pb-16 sm:pb-20">
+      <header className="border-b border-rule-strong pb-6 sm:pb-8">
         <p className="smallcaps mb-2">Section III — The Artist</p>
-        <h2 className="display text-5xl sm:text-6xl text-ink">A career, in figures.</h2>
-        <p className="mt-3 font-serif italic text-xl text-ink-soft max-w-2xl">
+        <h2
+          className="display text-ink"
+          style={{ fontSize: "clamp(2.25rem, 8vw, 4rem)" }}
+        >
+          A career, in figures.
+        </h2>
+        <p className="mt-3 font-serif italic text-lg sm:text-xl text-ink-soft max-w-2xl">
           Pull a catalogue from the wires. Read it as a single body of work.
         </p>
       </header>
 
       <form
         onSubmit={onSubmit}
-        className="mt-10 grid gap-8 sm:grid-cols-[2fr_1fr_auto] items-end"
+        className="mt-8 sm:mt-10 grid gap-6 sm:gap-8 sm:grid-cols-[2fr_1fr_auto] items-end"
       >
         <label className="block">
           <span className="smallcaps mb-1 block">The Artist</span>
@@ -207,9 +214,7 @@ function ArtistPageInner() {
       )}
 
       {error && (
-        <p className="mt-10 font-serif italic text-accent text-lg border-l-2 border-accent pl-4">
-          {error}
-        </p>
+        <ErrorNote err={error} onRetry={() => run(name, min, forceFetch, "")} />
       )}
 
       {data && !loading && <ArtistView data={data} />}
@@ -260,7 +265,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
         </PullQuote>
       )}
 
-      <section className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4 my-12">
+      <section className="grid gap-6 sm:gap-10 grid-cols-2 lg:grid-cols-4 my-10 sm:my-12">
         <StatFigure
           label="Avg. words / song"
           value={s.avg_words_per_song.toFixed(0)}
@@ -283,7 +288,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
         />
       </section>
 
-      <section className="grid gap-12 lg:grid-cols-[1fr_1.1fr] mt-12">
+      <section className="grid gap-10 sm:gap-12 lg:grid-cols-[1fr_1.1fr] mt-10 sm:mt-12">
         <div className="space-y-8">
           {s.longest_song?.title && (
             <Highlight
@@ -311,34 +316,43 @@ function ArtistView({ data }: { data: ArtistPayload }) {
         <WordTable title="Most-used Words" rows={s.top_words_no_stop} max={20} />
       </section>
 
-      <section className="mt-20">
-        <h3 className="display text-3xl mb-6">The Catalogue</h3>
+      <section className="mt-16 sm:mt-20">
+        <h3
+          className="display mb-5 sm:mb-6"
+          style={{ fontSize: "clamp(1.75rem, 6vw, 2.5rem)" }}
+        >
+          The Catalogue
+        </h3>
         <div className="border-t border-rule-strong">
           {topSongs.map((song, i) => (
             <div
               key={song.title}
-              className="grid grid-cols-[2.5rem_1fr_auto_auto_auto] gap-4 items-baseline border-b border-rule py-3"
+              className="grid grid-cols-[2rem_1fr] sm:grid-cols-[2.5rem_1fr_auto_auto_auto] gap-x-3 sm:gap-x-4 gap-y-2 items-baseline border-b border-rule py-3"
             >
-              <span className="figure text-ink-mute tabular-nums">
+              <span className="figure text-ink-mute tabular-nums text-sm sm:text-base self-start mt-1">
                 {String(i + 1).padStart(2, "0")}
               </span>
-              <div>
-                <p className="font-serif text-xl text-ink leading-tight">
+              <div className="min-w-0">
+                <p className="font-serif text-lg sm:text-xl text-ink leading-tight break-words">
                   {song.title}
                 </p>
                 {song.album && (
-                  <p className="text-[0.78rem] italic text-ink-mute mt-0.5">
+                  <p className="text-[0.72rem] sm:text-[0.78rem] italic text-ink-mute mt-0.5 break-words">
                     {song.album}
                     {song.year ? ` · ${song.year}` : ""}
                   </p>
                 )}
               </div>
-              <Mini label="words" value={song.word_count.toLocaleString()} />
-              <Mini label="unique" value={song.unique_words.toLocaleString()} />
-              <Mini
-                label="variety"
-                value={`${(song.type_token_ratio * 100).toFixed(0)}%`}
-              />
+              {/* On mobile, the three minis sit below the title spanning both
+                  columns; on desktop they slide into their own grid columns. */}
+              <div className="col-start-2 sm:col-start-auto flex sm:contents gap-5 sm:gap-0 pt-1 sm:pt-0">
+                <Mini label="words" value={song.word_count.toLocaleString()} />
+                <Mini label="unique" value={song.unique_words.toLocaleString()} />
+                <Mini
+                  label="variety"
+                  value={`${(song.type_token_ratio * 100).toFixed(0)}%`}
+                />
+              </div>
             </div>
           ))}
         </div>
@@ -366,10 +380,12 @@ function Highlight({
 }
 
 function Mini({ label, value }: { label: string; value: string }) {
+  // On mobile (flex row), align left and let them sit side-by-side.
+  // On desktop (contents → real grid columns), align right.
   return (
-    <div className="text-right min-w-[3.5rem]">
-      <div className="figure text-base tabular-nums">{value}</div>
-      <div className="smallcaps text-[0.65rem]">{label}</div>
+    <div className="text-left sm:text-right min-w-[3rem] sm:min-w-[3.5rem]">
+      <div className="figure text-sm sm:text-base tabular-nums">{value}</div>
+      <div className="smallcaps text-[0.62rem] sm:text-[0.65rem]">{label}</div>
     </div>
   );
 }

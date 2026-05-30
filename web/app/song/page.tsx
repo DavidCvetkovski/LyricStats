@@ -8,6 +8,8 @@ import { StatFigure } from "@/components/StatFigure";
 import { WordTable } from "@/components/WordTable";
 import { PullQuote } from "@/components/PullQuote";
 import { loadLastSong, saveLastSong } from "@/lib/lastSearch";
+import { friendlyError, type FriendlyError } from "@/lib/errors";
+import { ErrorNote } from "@/components/ErrorNote";
 
 export default function SongPage() {
   return (
@@ -27,7 +29,7 @@ function SongPageInner() {
   const [artist, setArtist] = useState(urlArtist);
   const [title, setTitle] = useState(urlTitle);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FriendlyError | null>(null);
   const [song, setSong] = useState<SongPayload | null>(null);
 
   const lastKey = useRef<string>("");
@@ -41,7 +43,7 @@ function SongPageInner() {
       setSong(s);
       saveLastSong({ artist: a, title: t });
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(friendlyError(err));
       setSong(null);
     } finally {
       setLoading(false);
@@ -79,17 +81,22 @@ function SongPageInner() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-6 pt-10 pb-20">
-      <header className="border-b border-rule-strong pb-8">
+    <div className="mx-auto max-w-6xl px-4 sm:px-6 pt-8 sm:pt-10 pb-16 sm:pb-20">
+      <header className="border-b border-rule-strong pb-6 sm:pb-8">
         <p className="smallcaps mb-2">Section II — On a Song</p>
-        <h2 className="display text-5xl sm:text-6xl text-ink">A single track, examined.</h2>
-        <p className="mt-3 font-serif italic text-xl text-ink-soft max-w-2xl">
+        <h2
+          className="display text-ink"
+          style={{ fontSize: "clamp(2.25rem, 8vw, 4rem)" }}
+        >
+          A single track, examined.
+        </h2>
+        <p className="mt-3 font-serif italic text-lg sm:text-xl text-ink-soft max-w-2xl">
           Name an artist and a song. We will retrieve the lyrics, count them, and
           set the result in&nbsp;type.
         </p>
       </header>
 
-      <form onSubmit={onSubmit} className="mt-10 grid gap-8 sm:grid-cols-2">
+      <form onSubmit={onSubmit} className="mt-8 sm:mt-10 grid gap-6 sm:gap-8 sm:grid-cols-2">
         <label className="block">
           <span className="smallcaps mb-1 block">The Artist</span>
           <input
@@ -124,11 +131,7 @@ function SongPageInner() {
         </p>
       )}
 
-      {error && (
-        <p className="mt-10 font-serif italic text-accent text-lg border-l-2 border-accent pl-4">
-          {error}
-        </p>
-      )}
+      {error && <ErrorNote err={error} onRetry={() => run(artist, title)} />}
 
       {song && !loading && <SongView song={song} />}
     </div>
@@ -167,7 +170,7 @@ function SongView({ song }: { song: SongPayload }) {
         </PullQuote>
       )}
 
-      <section className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4 my-12">
+      <section className="grid gap-6 sm:gap-10 grid-cols-2 lg:grid-cols-4 my-10 sm:my-12">
         <StatFigure
           label="Total Words"
           value={s.word_count.toLocaleString()}
@@ -194,7 +197,7 @@ function SongView({ song }: { song: SongPayload }) {
         />
       </section>
 
-      <section className="grid gap-12 lg:grid-cols-[1.1fr_1fr] mt-12">
+      <section className="grid gap-10 sm:gap-12 lg:grid-cols-[1.1fr_1fr] mt-12">
         <div>
           <WordTable title="Most-used Words" rows={s.top_words_no_stop} max={15} />
           <p className="mt-3 text-[0.78rem] italic text-ink-mute">
