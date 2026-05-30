@@ -1,0 +1,49 @@
+# VCS + editor
+.git
+.github
+.gitignore
+.claude
+.vscode
+.idea
+*.swp
+
+# Python build artefacts
+.venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# Node build artefacts (re-built inside Docker)
+node_modules
+web/node_modules
+web/.next
+web/.turbo
+web/out
+web/coverage
+
+# Data + secrets — must NEVER ship into the image
+data
+*.db
+*.db-journal
+.env
+.env.local
+.streamlit/secrets.toml
+
+# OS noise
+.DS_Store
+Thumbs.db
+*.log
+/tmp
+
+# Docs that don't belong in the image
+PLAN.md
+README.md
+LICENSE.md
+Makefile
+start.sh
+streamlit_app.py
+pages
+tests

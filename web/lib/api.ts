@@ -1,7 +1,9 @@
 import type { ArtistPayload, SongPayload } from "./types";
 
-const BASE =
-  process.env.NEXT_PUBLIC_API_BASE || process.env.API_BASE || "http://localhost:8000";
+// Empty string → relative paths → goes through Next's /api/* rewrite to the
+// internal FastAPI process. Override only if pointing at a different host
+// (e.g. tunnelled backend during local dev).
+const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
 async function get<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { cache: "no-store", ...init });
