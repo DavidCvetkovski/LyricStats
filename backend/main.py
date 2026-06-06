@@ -160,16 +160,34 @@ def _aggregate_payload(name: str, n: int, shuffle: str) -> dict[str, Any]:
     if not all_songs:
         raise HTTPException(status_code=404, detail=f"No songs for '{name}'.")
 
-    songs = _pick_n(all_songs, n, seed_key=f"{a.name}|{n}|{shuffle}")
-    pairs: list[tuple[str, str]] = []
-    metas: list[dict[str, Any]] = []
-    for s in songs:
+    # Filter out zero-word songs (instrumental, empty, translation metadata, etc.)
+    valid_songs = []
+    for s in all_songs:
+        if not s.lyrics or not s.lyrics.strip():
+            continue
         cached = db.load_stats(s)
-        if cached and "section_sequence" in cached:
+        if cached and "word_count" in cached:
+            if cached["word_count"] == 0:
+                continue
             st = stats.SongStats(**cached)
         else:
             st = stats.compute(s.lyrics)
             db.save_stats(s, st.to_dict())
+            if st.word_count == 0:
+                continue
+        valid_songs.append((s, st))
+
+    if not valid_songs:
+        raise HTTPException(status_code=404, detail=f"No songs with lyrics for '{name}'.")
+
+    # Sample from the valid songs
+    sampled_pairs = _pick_n([x[0] for x in valid_songs], n, seed_key=f"{a.name}|{n}|{shuffle}")
+    valid_map = {s.id: st for s, st in valid_songs}
+
+    pairs: list[tuple[str, str]] = []
+    metas: list[dict[str, Any]] = []
+    for s in sampled_pairs:
+        st = valid_map[s.id]
         pairs.append((s.title, s.lyrics))
         metas.append(
             {
@@ -194,8 +212,8 @@ def _aggregate_payload(name: str, n: int, shuffle: str) -> dict[str, Any]:
         "genius_url": a.genius_url,
         "songs": metas,
         "stats": agg.to_dict(),
-        "cached_total": len(all_songs),
-        "sampled": len(songs),
+        "cached_total": len(valid_songs),
+        "sampled": len(sampled_pairs),
     }
 
 
@@ -216,33 +234,47 @@ def artist_pool(
     """
     existing = db.get_artist(name)
     cached_songs = db.list_songs(existing) if existing else []
+    cached_valid = [s for s in cached_songs if s.lyrics and s.lyrics.strip()]
 
-    if not fresh and len(cached_songs) >= min:
+    target_count = min
+    if existing and existing.total_songs is not None:
+        target_count = min if min < existing.total_songs else existing.total_songs
+
+    if not fresh and len(cached_valid) >= target_count:
         return {
             "name": existing.name if existing else name,
             "genius_url": existing.genius_url if existing else None,
             "to_fetch": [],
-            "cached_total": len(cached_songs),
+            "cached_total": len(cached_valid),
         }
 
     try:
-        a, sample = fetch.resolve_and_sample(name, min, shuffle_seed=shuffle or None)
+        a, sample = fetch.resolve_and_sample(name, target_count, shuffle_seed=shuffle or None)
     except fetch.FetchError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001
         log.exception("artist pool failed")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
-    to_fetch = [
-        {"id": int(m["id"]), "title": m.get("title", "?")}
-        for m in sample
-        if m.get("id")
-    ]
+    all_cached = db.list_songs(a)
+    cached_genius_ids = {s.genius_id for s in all_cached if s.genius_id is not None}
+    cached_titles = {s.title.strip().lower() for s in all_cached if s.lyrics and s.lyrics.strip()}
+
+    to_fetch = []
+    for m in sample:
+        song_id = m.get("id")
+        if not song_id:
+            continue
+        title = m.get("title", "?")
+        if int(song_id) in cached_genius_ids or title.strip().lower() in cached_titles:
+            continue
+        to_fetch.append({"id": int(song_id), "title": title})
+
     return {
         "name": a.name,
         "genius_url": a.genius_url,
         "to_fetch": to_fetch,
-        "cached_total": len(db.list_songs(a)),
+        "cached_total": len(all_cached),
     }
 
 
