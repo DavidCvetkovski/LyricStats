@@ -18,3 +18,5 @@ web/out/
 web/.turbo/
 web/next-env.d.ts
 
+.vercel
+.env*

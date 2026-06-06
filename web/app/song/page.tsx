@@ -189,12 +189,21 @@ function SongView({ song }: { song: SongPayload }) {
           caption="distinct words ÷ total words"
           size="lg"
         />
-        <StatFigure
-          label="Chorus Share"
-          value={`${Math.round(s.chorus_ratio * 100)}%`}
-          caption="of all lines"
-          size="lg"
-        />
+        {s.section_count > 0 ? (
+          <StatFigure
+            label="Chorus Share"
+            value={`${Math.round(s.chorus_ratio * 100)}%`}
+            caption="of all lines"
+            size="lg"
+          />
+        ) : (
+          <StatFigure
+            label="Line Repetition"
+            value={`${Math.round(s.repetition_ratio * 100)}%`}
+            caption="repeated lines"
+            size="lg"
+          />
+        )}
       </section>
 
       <section className="grid gap-10 sm:gap-12 lg:grid-cols-[1.1fr_1fr] mt-12">
@@ -209,7 +218,9 @@ function SongView({ song }: { song: SongPayload }) {
         <div className="space-y-10">
           <Inline label="Avg. word length" value={`${s.avg_word_length} chars`} />
           <Inline label="Avg. words per line" value={String(s.avg_words_per_line)} />
-          <Inline label="Sections" value={String(s.section_count)} />
+          {s.section_count > 0 && (
+            <Inline label="Sections" value={String(s.section_count)} />
+          )}
           <Inline
             label="Line repetition"
             value={`${Math.round(s.repetition_ratio * 100)}%`}

@@ -14,7 +14,7 @@ st.title("🎤 Artist")
 with st.form("artist_form"):
     c1, c2, c3 = st.columns([4, 1, 1])
     name = c1.text_input("Artist", placeholder="e.g. Buba Corelli")
-    max_songs = c2.number_input("Max songs", min_value=5, max_value=100, value=20, step=5)
+    song_count = c2.number_input("Songs", min_value=5, max_value=100, value=20, step=5)
     fetch_now = c3.checkbox(
         "Fetch from Genius", value=True,
         help="Uncheck to only read what's already cached locally.",
@@ -38,7 +38,7 @@ if fetch_now:
 
     try:
         with st.spinner(f"Fetching catalogue for {name}…"):
-            n = fetch.fetch_artist_catalogue(name, max_songs=int(max_songs), progress=_progress)
+            n = fetch.fetch_artist_catalogue(name, min_songs=int(song_count), progress=_progress)
         progress_bar.empty()
         placeholder.success(f"Fetched {n} songs.")
     except fetch.FetchError as e:

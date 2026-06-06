@@ -13,7 +13,7 @@ from typing import Optional
 
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
-from .config import DB_PATH
+from .config import DATABASE_URL, DB_PATH
 
 
 class Artist(SQLModel, table=True):
@@ -37,12 +37,38 @@ class Song(SQLModel, table=True):
     fetched_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-_engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)
+def _make_engine():
+    """Postgres (Neon, etc.) when DATABASE_URL is set, else a local SQLite file.
+
+    On serverless the engine is created once per warm container and reused
+    across invocations; pool_pre_ping recycles connections dropped by the
+    pooler between cold periods.
+    """
+    if DATABASE_URL:
+        url = DATABASE_URL
+        # Normalise common Postgres URL forms to the psycopg (v3) driver.
+        if url.startswith("postgres://"):
+            url = "postgresql+psycopg://" + url[len("postgres://"):]
+        elif url.startswith("postgresql://"):
+            url = "postgresql+psycopg://" + url[len("postgresql://"):]
+        return create_engine(url, echo=False, pool_pre_ping=True)
+    return create_engine(f"sqlite:///{DB_PATH}", echo=False)
+
+
+_engine = _make_engine()
 SQLModel.metadata.create_all(_engine)
 
 
 def _migrate() -> None:
-    """Idempotent column additions for tables created by older versions."""
+    """Idempotent column additions for tables created by older versions.
+
+    Only needed for SQLite databases created before `genius_url` existed. On a
+    fresh Postgres database `create_all` above already includes every current
+    column, so this raw PRAGMA (SQLite-only) is skipped.
+    """
+    if _engine.dialect.name != "sqlite":
+        return
+
     from sqlalchemy import text  # noqa: PLC0415
 
     with _engine.begin() as conn:

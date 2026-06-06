@@ -1,34 +1,37 @@
 """FastAPI backend — thin wrapper around the lyricstats package.
 
-Serves JSON for the Next.js frontend. The artist endpoint streams NDJSON
-so the client can render fetch progress without polling.
+Serves JSON for the Next.js frontend. Every endpoint is short and stateless so
+it fits a serverless function: the browser orchestrates a catalogue fetch by
+calling `/api/artist/pool` once, then `/api/song/by-id` per song, then
+`/api/artist` to aggregate from the shared (Postgres) cache.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import queue
 import random
-import threading
-from typing import Any, Generator
+from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from lyricstats import db, fetch, stats
+from lyricstats.config import SEED_KEY
 
 log = logging.getLogger("lyricstats.api")
 logging.basicConfig(level=logging.INFO)
 
-app = FastAPI(title="LyricStats API", version="0.2.0")
+app = FastAPI(title="LyricStats API", version="0.3.0")
 app.add_middleware(
     CORSMiddleware,
+    # Localhost for dev; any *.vercel.app origin (prod + preview deploys) in
+    # production. The API carries no cookies, so credentials stay off.
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
@@ -38,7 +41,50 @@ app.add_middleware(
 @app.get("/health")
 @app.get("/api/health")
 def health() -> dict[str, Any]:
-    return {"ok": True, "version": "0.2.0"}
+    return {"ok": True, "version": "0.3.0"}
+
+
+# ── seed ingest — push full-quality lyrics from a residential IP ─────────────
+
+
+class IngestSong(BaseModel):
+    artist: str
+    title: str
+    lyrics: str
+    album: str | None = None
+    year: int | None = None
+    genius_id: int | None = None
+    artist_id: int | None = None
+    artist_url: str | None = None
+
+
+@app.post("/api/ingest")
+def ingest(song: IngestSong, x_seed_key: str = Header(default="")) -> dict[str, Any]:
+    """Upsert one song's lyrics into the shared database.
+
+    Guarded by the SEED_KEY shared secret. The seed scripts (run on your
+    laptop/phone, where Genius scraping works) fetch full lyrics and POST them
+    here, so the deployed app can serve them without ever scraping itself.
+    """
+    if not SEED_KEY:
+        raise HTTPException(status_code=503, detail="Ingest disabled: SEED_KEY not set.")
+    if x_seed_key != SEED_KEY:
+        raise HTTPException(status_code=403, detail="Bad or missing X-Seed-Key.")
+    if not song.lyrics.strip():
+        raise HTTPException(status_code=400, detail="Empty lyrics.")
+
+    a = db.get_or_create_artist(
+        song.artist, genius_id=song.artist_id, genius_url=song.artist_url
+    )
+    db.upsert_song(
+        a,
+        title=song.title,
+        lyrics=song.lyrics,
+        album=song.album,
+        year=song.year,
+        genius_id=song.genius_id,
+    )
+    return {"ok": True, "artist": a.name, "title": song.title}
 
 
 # ── single song ────────────────────────────────────────────────────────────
@@ -79,7 +125,7 @@ def song(
     }
 
 
-# ── artist (streaming) ─────────────────────────────────────────────────────
+# ── artist ──────────────────────────────────────────────────────────────────
 
 
 def _pick_n(songs: list[db.Song], n: int, seed_key: str) -> list[db.Song]:
@@ -136,6 +182,7 @@ def _aggregate_payload(name: str, n: int, shuffle: str) -> dict[str, Any]:
                 "chorus_ratio": st.chorus_ratio,
                 "repetition_ratio": st.repetition_ratio,
                 "line_count": st.line_count,
+                "section_count": st.section_count,
             }
         )
 
@@ -150,87 +197,90 @@ def _aggregate_payload(name: str, n: int, shuffle: str) -> dict[str, Any]:
     }
 
 
-def _line(obj: dict[str, Any]) -> bytes:
-    return (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
+@app.get("/api/artist/pool")
+def artist_pool(
+    name: str = Query(..., min_length=1),
+    min: int = Query(20, ge=1, le=500, alias="min"),
+    fresh: bool = Query(False),
+    shuffle: str = Query("", max_length=32),
+) -> dict[str, Any]:
+    """Plan a catalogue fetch. Fast: resolves the artist and samples song
+    metadata on Genius, but fetches no lyrics.
+
+    Returns the list of songs the browser should fetch one-by-one via
+    `/api/song/by-id`. When `fresh` is false and the cache already holds at
+    least `min` songs, `to_fetch` is empty so the client skips straight to
+    `/api/artist` (today's prefer-cache default).
+    """
+    existing = db.get_artist(name)
+    cached_songs = db.list_songs(existing) if existing else []
+
+    if not fresh and len(cached_songs) >= min:
+        return {
+            "name": existing.name if existing else name,
+            "genius_url": existing.genius_url if existing else None,
+            "to_fetch": [],
+            "cached_total": len(cached_songs),
+        }
+
+    try:
+        a, sample = fetch.resolve_and_sample(name, min, shuffle_seed=shuffle or None)
+    except fetch.FetchError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:  # noqa: BLE001
+        log.exception("artist pool failed")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    to_fetch = [
+        {"id": int(m["id"]), "title": m.get("title", "?")}
+        for m in sample
+        if m.get("id")
+    ]
+    return {
+        "name": a.name,
+        "genius_url": a.genius_url,
+        "to_fetch": to_fetch,
+        "cached_total": len(db.list_songs(a)),
+    }
+
+
+@app.get("/api/song/by-id")
+def song_by_id(
+    name: str = Query(..., min_length=1),
+    id: int = Query(..., ge=1),
+    title: str = Query("?"),
+) -> dict[str, Any]:
+    """Fetch one song's lyrics by Genius id and cache them under the artist.
+
+    Called once per song by the browser while it drives a catalogue fetch.
+    """
+    a = db.get_artist(name) or db.get_or_create_artist(name)
+    try:
+        saved = fetch.fetch_one_by_id(a, id, title)
+    except fetch.FetchError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:  # noqa: BLE001
+        log.exception("song-by-id fetch failed")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    return {"ok": saved}
 
 
 @app.get("/api/artist")
 def artist(
     name: str = Query(..., min_length=1),
-    min: int = Query(20, ge=1, le=100, alias="min"),
-    prefer_cache: bool = Query(True),
+    min: int = Query(20, ge=1, le=500, alias="min"),
     shuffle: str = Query("", max_length=32),
-) -> StreamingResponse:
-    """Stream NDJSON: zero or more `{type:"progress"}` events, then exactly
-    one terminal `{type:"result"}` or `{type:"error"}`.
+) -> dict[str, Any]:
+    """Aggregate stats over a random sample of the artist's cached songs.
 
-    If `prefer_cache` is true (default) and the cache already holds at
-    least `min` songs for the artist, return a deterministic random
-    sample of N from the cache with no Genius fetch. Otherwise, fetch
-    until we have at least `min` and then return a sample of N.
+    Pure read + compute over the shared cache (no Genius fetch), so it returns
+    quickly. The browser calls this after it has populated the cache via
+    `/api/artist/pool` + `/api/song/by-id`.
     """
-
-    def gen() -> Generator[bytes, None, None]:
-        existing = db.get_artist(name)
-        cached_songs = db.list_songs(existing) if existing else []
-        cache_has_enough = len(cached_songs) >= min
-
-        # Decide whether we need to hit Genius at all.
-        needs_fetch = not (prefer_cache and cache_has_enough)
-
-        if needs_fetch:
-            # Fetch with progress in a worker thread, drain a queue here.
-            events: queue.Queue[dict[str, Any]] = queue.Queue()
-
-            def on_progress(done: int, total: int, current: str) -> None:
-                events.put(
-                    {"type": "progress", "done": done, "total": total, "current": current}
-                )
-
-            def worker() -> None:
-                try:
-                    fetch.fetch_artist_catalogue(
-                        name,
-                        min_songs=min,
-                        shuffle_seed=shuffle or None,
-                        progress=on_progress,
-                    )
-                    events.put({"type": "_done"})
-                except fetch.FetchError as e:
-                    events.put({"type": "error", "message": str(e)})
-                except Exception as e:  # noqa: BLE001
-                    log.exception("artist fetch worker failed")
-                    events.put({"type": "error", "message": str(e)})
-
-            t = threading.Thread(target=worker, daemon=True)
-            t.start()
-
-            yield _line({"type": "progress", "done": 0, "total": min, "current": "starting…"})
-
-            while True:
-                ev = events.get()
-                if ev["type"] == "_done":
-                    break
-                if ev["type"] == "error":
-                    yield _line(ev)
-                    return
-                yield _line(ev)
-
-        # Aggregate and emit result
-        try:
-            payload = _aggregate_payload(name, n=min, shuffle=shuffle)
-        except HTTPException as e:
-            yield _line({"type": "error", "message": e.detail})
-            return
-        except Exception as e:  # noqa: BLE001
-            log.exception("aggregate failed")
-            yield _line({"type": "error", "message": str(e)})
-            return
-
-        yield _line({"type": "result", "payload": payload})
-
-    return StreamingResponse(
-        gen(),
-        media_type="application/x-ndjson",
-        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
-    )
+    try:
+        return _aggregate_payload(name, n=min, shuffle=shuffle)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        log.exception("aggregate failed")
+        raise HTTPException(status_code=500, detail=str(e)) from e

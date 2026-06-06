@@ -1,8 +1,9 @@
 import type { ArtistPayload, SongPayload } from "./types";
 
-// Empty string → relative paths → goes through Next's /api/* rewrite to the
-// internal FastAPI process. Override only if pointing at a different host
-// (e.g. tunnelled backend during local dev).
+// In production NEXT_PUBLIC_API_BASE points at the Vercel Python API project
+// (e.g. https://lyricstats-api.vercel.app), so the browser calls it directly
+// (CORS is allowed for *.vercel.app). Empty → relative paths, which works for
+// local dev where the FastAPI process is proxied via Next's /api/* rewrite.
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
 async function get<T>(path: string, init?: RequestInit): Promise<T> {
@@ -24,7 +25,13 @@ export function getSong(
   return get<SongPayload>(`/api/song?${q.toString()}`);
 }
 
-// ── streaming artist ──────────────────────────────────────────────────────
+// ── artist (client-orchestrated fetch) ─────────────────────────────────────
+//
+// A catalogue fetch is three steps the browser drives itself, so each request
+// stays short enough for a serverless function:
+//   1. getArtistPool — resolve + sample on Genius (fetches no lyrics)
+//   2. fetchSongById — one call per sampled song, populates the cache
+//   3. getArtistStats — aggregate from the now-populated cache
 
 export type ArtistProgress = {
   done: number;
@@ -32,78 +39,49 @@ export type ArtistProgress = {
   current: string;
 };
 
-export type ArtistStreamHandlers = {
-  onProgress?: (p: ArtistProgress) => void;
-  signal?: AbortSignal;
+export type ArtistSongRef = { id: number; title: string };
+
+export type ArtistPool = {
+  name: string;
+  genius_url: string | null;
+  to_fetch: ArtistSongRef[];
+  cached_total: number;
 };
 
-/**
- * Streams the artist endpoint, calling onProgress for each progress event
- * and resolving with the final ArtistPayload when the result arrives.
- */
-export async function streamArtist(
+/** Plan a fetch: which songs (if any) the client must fetch one-by-one. */
+export function getArtistPool(
   name: string,
   min: number,
-  preferCache: boolean,
+  fresh: boolean,
   shuffle: string,
-  handlers: ArtistStreamHandlers = {},
-): Promise<ArtistPayload> {
+): Promise<ArtistPool> {
+  const q = new URLSearchParams({ name, min: String(min) });
+  if (fresh) q.set("fresh", "1");
+  if (shuffle) q.set("shuffle", shuffle);
+  return get<ArtistPool>(`/api/artist/pool?${q.toString()}`);
+}
+
+/** Fetch and cache one song's lyrics by Genius id. */
+export function fetchSongById(
+  name: string,
+  ref: ArtistSongRef,
+  signal?: AbortSignal,
+): Promise<{ ok: boolean }> {
   const q = new URLSearchParams({
     name,
-    min: String(min),
-    prefer_cache: preferCache ? "1" : "0",
+    id: String(ref.id),
+    title: ref.title,
   });
+  return get<{ ok: boolean }>(`/api/song/by-id?${q.toString()}`, { signal });
+}
+
+/** Aggregate stats over a random sample of the artist's cached songs. */
+export function getArtistStats(
+  name: string,
+  min: number,
+  shuffle: string,
+): Promise<ArtistPayload> {
+  const q = new URLSearchParams({ name, min: String(min) });
   if (shuffle) q.set("shuffle", shuffle);
-  const res = await fetch(`${BASE}/api/artist?${q.toString()}`, {
-    signal: handlers.signal,
-    cache: "no-store",
-  });
-  if (!res.ok || !res.body) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`API ${res.status}: ${body || res.statusText}`);
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  let result: ArtistPayload | null = null;
-
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let nl: number;
-    while ((nl = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, nl).trim();
-      buf = buf.slice(nl + 1);
-      if (!line) continue;
-      let ev: {
-        type: string;
-        done?: number;
-        total?: number;
-        current?: string;
-        message?: string;
-        payload?: ArtistPayload;
-      };
-      try {
-        ev = JSON.parse(line);
-      } catch {
-        continue;
-      }
-      if (ev.type === "progress") {
-        handlers.onProgress?.({
-          done: ev.done ?? 0,
-          total: ev.total ?? 1,
-          current: ev.current ?? "",
-        });
-      } else if (ev.type === "result" && ev.payload) {
-        result = ev.payload;
-      } else if (ev.type === "error") {
-        throw new Error(ev.message || "Unknown server error");
-      }
-    }
-  }
-
-  if (!result) throw new Error("Stream ended without a result");
-  return result;
+  return get<ArtistPayload>(`/api/artist?${q.toString()}`);
 }

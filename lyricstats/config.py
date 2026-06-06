@@ -27,5 +27,30 @@ def get(key: str, default: str | None = None) -> str | None:
 
 
 GENIUS_TOKEN: str | None = get("GENIUS_TOKEN")
+
+
+def _truthy(val: str | None, default: bool) -> bool:
+    if val is None:
+        return default
+    return val.strip().lower() not in {"0", "false", "no", "off", ""}
+
+
+# Whether to attempt scraping full lyrics (with [Chorus]/[Verse] section tags)
+# from genius.com pages. Works from residential IPs (your laptop/phone) but
+# Cloudflare 403s datacenter IPs, so we disable it on Vercel (GENIUS_SCRAPE=0)
+# and fall back to lrclib/lyrics.ovh there.
+GENIUS_SCRAPE: bool = _truthy(get("GENIUS_SCRAPE", "1"), default=True)
+
+# Shared secret guarding the /api/ingest endpoint used by the seed scripts to
+# push full-quality lyrics into the cloud database. Unset = endpoint disabled.
+SEED_KEY: str | None = get("SEED_KEY")
+
+# Postgres (Neon, etc.) in production; falls back to a local SQLite file when
+# DATABASE_URL is unset so local dev / tests / Streamlit keep working as before.
+DATABASE_URL: str | None = get("DATABASE_URL")
 DB_PATH: Path = Path(get("LYRICSTATS_DB", "./data/lyricstats.db") or "./data/lyricstats.db")
-DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+# Only touch the filesystem for the SQLite fallback. On serverless (Postgres)
+# the working dir is read-only except /tmp, so skip the mkdir entirely.
+if not DATABASE_URL:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
