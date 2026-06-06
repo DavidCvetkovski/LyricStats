@@ -240,7 +240,7 @@ def artist_pool(
     if existing and existing.total_songs is not None:
         target_count = min if min < existing.total_songs else existing.total_songs
 
-    if not fresh and len(cached_valid) >= target_count:
+    if not fresh and len(cached_songs) >= target_count:
         return {
             "name": existing.name if existing else name,
             "genius_url": existing.genius_url if existing else None,
@@ -258,7 +258,7 @@ def artist_pool(
 
     all_cached = db.list_songs(a)
     cached_genius_ids = {s.genius_id for s in all_cached if s.genius_id is not None}
-    cached_titles = {s.title.strip().lower() for s in all_cached if s.lyrics and s.lyrics.strip()}
+    cached_titles = {s.title.strip().lower() for s in all_cached}
 
     to_fetch = []
     for m in sample:

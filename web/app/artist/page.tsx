@@ -199,7 +199,7 @@ function ArtistPageInner() {
 
       {loading && !progress && (
         <p className="mt-10 font-serif italic text-ink-soft text-lg max-w-2xl mx-auto text-center">
-          Reading what is on file…
+          Loading…
         </p>
       )}
 
