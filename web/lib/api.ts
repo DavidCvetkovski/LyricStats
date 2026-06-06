@@ -54,11 +54,12 @@ export function getArtistPool(
   min: number,
   fresh: boolean,
   shuffle: string,
+  signal?: AbortSignal,
 ): Promise<ArtistPool> {
   const q = new URLSearchParams({ name, min: String(min) });
   if (fresh) q.set("fresh", "1");
   if (shuffle) q.set("shuffle", shuffle);
-  return get<ArtistPool>(`/api/artist/pool?${q.toString()}`);
+  return get<ArtistPool>(`/api/artist/pool?${q.toString()}`, { signal });
 }
 
 /** Fetch and cache one song's lyrics by Genius id. */
@@ -80,8 +81,9 @@ export function getArtistStats(
   name: string,
   min: number,
   shuffle: string,
+  signal?: AbortSignal,
 ): Promise<ArtistPayload> {
   const q = new URLSearchParams({ name, min: String(min) });
   if (shuffle) q.set("shuffle", shuffle);
-  return get<ArtistPayload>(`/api/artist?${q.toString()}`);
+  return get<ArtistPayload>(`/api/artist?${q.toString()}`, { signal });
 }

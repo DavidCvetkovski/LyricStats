@@ -12,7 +12,8 @@ export function Colophon() {
         <div>
           <p className="smallcaps text-ink mb-2">Method</p>
           <p>
-            Lyrics retrieved via Genius. Statistics computed in Python and
+            Catalogues indexed via the Genius API; lyrics sourced from Genius,
+            lrclib &amp; lyrics.ovh. Statistics computed in Python, cached, and
             served fresh.
           </p>
         </div>

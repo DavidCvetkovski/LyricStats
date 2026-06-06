@@ -43,7 +43,7 @@ export type SongMeta = {
   chorus_ratio: number;
   repetition_ratio: number;
   line_count: number;
-  section_count: number;
+  has_sections: boolean;
 };
 
 export type ArtistStats = {
