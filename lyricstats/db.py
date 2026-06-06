@@ -23,6 +23,7 @@ class Artist(SQLModel, table=True):
     genius_url: Optional[str] = None  # canonical Genius web URL, for disambiguation
     fetched_at: Optional[datetime] = None
     catalogue_fetched_at: Optional[datetime] = None
+    total_songs: Optional[int] = Field(default=None)
 
 
 class Song(SQLModel, table=True):
@@ -62,20 +63,19 @@ SQLModel.metadata.create_all(_engine)
 def _migrate() -> None:
     """Idempotent column additions for tables created by older versions.
 
-    Only needed for SQLite databases created before `genius_url` existed. On a
-    fresh Postgres database `create_all` above already includes every current
-    column, so this raw PRAGMA (SQLite-only) is skipped.
+    Inspects existing columns in both SQLite and Postgres to dynamically add
+    missing columns like `genius_url` and `total_songs`.
     """
-    if _engine.dialect.name != "sqlite":
-        return
+    from sqlalchemy import inspect, text  # noqa: PLC0415
 
-    from sqlalchemy import text  # noqa: PLC0415
-
-    with _engine.begin() as conn:
-        # Inspect existing columns and add any that are missing.
-        existing = {row[1] for row in conn.execute(text("PRAGMA table_info(artist)"))}
-        if "genius_url" not in existing:
-            conn.execute(text("ALTER TABLE artist ADD COLUMN genius_url VARCHAR"))
+    inspector = inspect(_engine)
+    if "artist" in inspector.get_table_names():
+        columns = {col["name"] for col in inspector.get_columns("artist")}
+        with _engine.begin() as conn:
+            if "genius_url" not in columns:
+                conn.execute(text("ALTER TABLE artist ADD COLUMN genius_url VARCHAR"))
+            if "total_songs" not in columns:
+                conn.execute(text("ALTER TABLE artist ADD COLUMN total_songs INTEGER"))
 
 
 _migrate()

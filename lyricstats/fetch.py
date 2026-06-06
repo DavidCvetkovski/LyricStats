@@ -203,11 +203,16 @@ def search_artist_api(name: str) -> tuple[int, str, str | None]:
     return int(best["id"]), best.get("name") or name, best.get("url")
 
 
-def artist_songs_api(artist_id: int, pool_size: int = 200) -> list[dict[str, Any]]:
-    """Page the artist's songs via the Genius API. Metadata only, no lyrics."""
+def artist_songs_api(artist_id: int, pool_size: int = 1000) -> tuple[list[dict[str, Any]], bool]:
+    """Page the artist's songs via the Genius API. Metadata only, no lyrics.
+
+    Returns a tuple of (pool, reached_end) where reached_end is True if we
+    finished paging all available songs from Genius.
+    """
     pool: list[dict[str, Any]] = []
     page: int | None = 1
     per_page = 50
+    reached_end = False
     while page and len(pool) < pool_size:
         data = _genius_api_get(
             f"/artists/{artist_id}/songs",
@@ -216,14 +221,17 @@ def artist_songs_api(artist_id: int, pool_size: int = 200) -> list[dict[str, Any
         resp = data.get("response", {})
         songs = resp.get("songs", []) or []
         if not songs:
+            reached_end = True
             break
         # Keep collaborations too (artists with frequent features would
         # otherwise show almost-empty catalogues).
         pool.extend(_meta_from_api_song(s) for s in songs if s.get("id"))
         page = resp.get("next_page")
-        if page:
-            time.sleep(0.1)
-    return pool
+        if not page:
+            reached_end = True
+            break
+        time.sleep(0.1)
+    return pool, reached_end
 
 
 def search_song_api(artist: str, title: str) -> dict[str, Any] | None:
@@ -428,7 +436,7 @@ def resolve_and_sample(
     n: int,
     *,
     hard_cap: int = 500,
-    pool_size: int = 200,
+    pool_size: int = 1000,
     shuffle_seed: str | None = None,
 ) -> tuple[db.Artist, list[dict[str, Any]]]:
     """Resolve an artist and pick a random sample of up to `n` songs to fetch —
@@ -441,9 +449,18 @@ def resolve_and_sample(
     artist_id, artist_name, artist_url = search_artist_api(name)
     a = db.get_or_create_artist(artist_name, genius_id=artist_id, genius_url=artist_url)
 
-    pool = artist_songs_api(artist_id, pool_size=pool_size)
+    pool, reached_end = artist_songs_api(artist_id, pool_size=pool_size)
     if not pool:
         raise FetchError(f"No songs found on Genius for '{artist_name}'.")
+
+    if reached_end:
+        with db.session() as s:
+            db_artist = s.get(db.Artist, a.id)
+            if db_artist:
+                db_artist.total_songs = len(pool)
+                s.add(db_artist)
+                s.commit()
+                a.total_songs = len(pool)
 
     rng = random.Random(shuffle_seed) if shuffle_seed else random.Random()
     sample = rng.sample(pool, min(n, len(pool)))
@@ -464,6 +481,26 @@ def fetch_one_by_id(
     On a residential IP (GENIUS_SCRAPE on) this scrapes full lyrics; on Vercel
     it falls back to lrclib/lyrics.ovh by artist + title. Returns True if saved.
     """
+    # Check if already cached in DB
+    if song_id:
+        with db.session() as s:
+            existing = s.exec(
+                db.select(db.Song).where(db.Song.artist_id == artist.id, db.Song.genius_id == song_id)
+            ).first()
+            if existing and existing.lyrics and existing.lyrics.strip():
+                return True
+    existing = db.find_song(artist.name, title)
+    if existing and existing.lyrics and existing.lyrics.strip():
+        # Keep genius_id updated if it was missing
+        if song_id and not existing.genius_id:
+            with db.session() as s:
+                db_song = s.get(db.Song, existing.id)
+                if db_song:
+                    db_song.genius_id = song_id
+                    s.add(db_song)
+                    s.commit()
+        return True
+
     lyrics, _source, src_album = get_lyrics(
         artist.name, title, song_url=song_url, song_id=song_id
     )
@@ -485,7 +522,7 @@ def fetch_artist_catalogue(
     *,
     min_songs: int = 20,
     hard_cap: int = 500,
-    pool_size: int = 200,
+    pool_size: int = 1000,
     shuffle_seed: str | None = None,
     progress=None,  # callable(done, total, current_title) for UI
 ) -> int:

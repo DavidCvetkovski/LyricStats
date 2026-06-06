@@ -57,3 +57,59 @@ def test_song_year_from_year_attr():
 
 def test_song_year_missing():
     assert _song_year(SimpleNamespace()) is None
+
+
+def test_fetch_one_by_id_when_cached_by_genius_id():
+    from unittest.mock import MagicMock, patch
+    from lyricstats import db, fetch
+
+    artist = db.Artist(id=1, name="test artist")
+    song_id = 99999
+
+    mock_song = MagicMock()
+    mock_song.lyrics = "test lyrics"
+    mock_song.genius_id = song_id
+
+    mock_exec = MagicMock()
+    mock_exec.first.return_value = mock_song
+
+    mock_session = MagicMock()
+    mock_session.__enter__.return_value = mock_session
+    mock_session.exec.return_value = mock_exec
+
+    with patch("lyricstats.db.session", return_value=mock_session), \
+         patch("lyricstats.fetch.get_lyrics") as mock_get_lyrics:
+
+        result = fetch.fetch_one_by_id(artist, song_id, "test title")
+
+        assert result is True
+        mock_get_lyrics.assert_not_called()
+
+
+def test_fetch_one_by_id_when_cached_by_title():
+    from unittest.mock import MagicMock, patch
+    from lyricstats import db, fetch
+
+    artist = db.Artist(id=1, name="test artist")
+    song_id = 99999
+
+    mock_song = MagicMock()
+    mock_song.lyrics = "test lyrics"
+    mock_song.genius_id = None
+
+    mock_exec = MagicMock()
+    mock_exec.first.return_value = None  # not found by genius_id
+
+    mock_session = MagicMock()
+    mock_session.__enter__.return_value = mock_session
+    mock_session.exec.return_value = mock_exec
+
+    with patch("lyricstats.db.session", return_value=mock_session), \
+         patch("lyricstats.db.find_song", return_value=mock_song) as mock_find_song, \
+         patch("lyricstats.fetch.get_lyrics") as mock_get_lyrics:
+
+        result = fetch.fetch_one_by_id(artist, song_id, "test title")
+
+        assert result is True
+        mock_find_song.assert_called_once_with(artist.name, "test title")
+        mock_get_lyrics.assert_not_called()
