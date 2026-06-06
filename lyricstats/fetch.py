@@ -481,16 +481,16 @@ def fetch_one_by_id(
     On a residential IP (GENIUS_SCRAPE on) this scrapes full lyrics; on Vercel
     it falls back to lrclib/lyrics.ovh by artist + title. Returns True if saved.
     """
-    # Check if already cached in DB
+    # Check if already cached in DB (even if empty lyrics, indicating a previous attempt)
     if song_id:
         with db.session() as s:
             existing = s.exec(
                 db.select(db.Song).where(db.Song.artist_id == artist.id, db.Song.genius_id == song_id)
             ).first()
-            if existing and existing.lyrics and existing.lyrics.strip():
+            if existing:
                 return True
     existing = db.find_song(artist.name, title)
-    if existing and existing.lyrics and existing.lyrics.strip():
+    if existing:
         # Keep genius_id updated if it was missing
         if song_id and not existing.genius_id:
             with db.session() as s:
@@ -504,8 +504,9 @@ def fetch_one_by_id(
     lyrics, _source, src_album = get_lyrics(
         artist.name, title, song_url=song_url, song_id=song_id
     )
+    # Save empty lyrics to mark as attempted so we don't repeat the fetch
     if not lyrics:
-        return False
+        lyrics = ""
     db.upsert_song(
         artist,
         title=title,
