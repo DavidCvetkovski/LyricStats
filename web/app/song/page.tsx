@@ -140,6 +140,10 @@ function SongPageInner() {
 
 function SongView({ song }: { song: SongPayload }) {
   const s = song.stats;
+  // Real structure only. Untagged lyrics (lrclib/ovh) parse as a single
+  // "other" section, so chorus/section/architecture stats are meaningless —
+  // only show them when Genius-style [Verse]/[Chorus] tags were present.
+  const hasStructure = s.section_sequence.some((k) => k !== "other");
   return (
     <article className="mt-16 rise">
       {/* Article header */}
@@ -189,7 +193,7 @@ function SongView({ song }: { song: SongPayload }) {
           caption="distinct words ÷ total words"
           size="lg"
         />
-        {s.section_count > 0 ? (
+        {hasStructure ? (
           <StatFigure
             label="Chorus Share"
             value={`${Math.round(s.chorus_ratio * 100)}%`}
@@ -218,7 +222,7 @@ function SongView({ song }: { song: SongPayload }) {
         <div className="space-y-10">
           <Inline label="Avg. word length" value={`${s.avg_word_length} chars`} />
           <Inline label="Avg. words per line" value={String(s.avg_words_per_line)} />
-          {s.section_count > 0 && (
+          {hasStructure && (
             <Inline label="Sections" value={String(s.section_count)} />
           )}
           <Inline
@@ -233,7 +237,7 @@ function SongView({ song }: { song: SongPayload }) {
             </p>
           </div>
 
-          {s.section_sequence.length > 0 && (
+          {hasStructure && (
             <div>
               <p className="smallcaps mb-3">Architecture</p>
               <ol className="border-t border-rule">
@@ -268,9 +272,6 @@ function SongView({ song }: { song: SongPayload }) {
         <pre className="font-serif text-lg leading-[1.7] whitespace-pre-wrap text-ink-soft max-w-3xl mx-auto">
           {song.lyrics}
         </pre>
-        <p className="text-[0.72rem] italic text-ink-mute mt-6 text-center">
-          Lyrics retrieved via Genius. Shown for analytical purposes only.
-        </p>
       </section>
     </article>
   );

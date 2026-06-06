@@ -42,40 +42,61 @@ function ArtistPageInner() {
   const [data, setData] = useState<ArtistPayload | null>(null);
 
   const lastKey = useRef<string>("");
+  const abortRef = useRef<AbortController | null>(null);
 
-  const run = useCallback(
-    async (n: string, m: number, sh: string) => {
-      if (!n) return;
-      setLoading(true);
-      setError(null);
+  const cancel = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setLoading(false);
+    setProgress(null);
+  }, []);
+
+  const run = useCallback(async (n: string, m: number, sh: string) => {
+    if (!n) return;
+    // Abort any in-flight run so a new search never gets stuck behind it.
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    const { signal } = ac;
+
+    setLoading(true);
+    setError(null);
+    setProgress(null);
+    setData(null);
+    try {
+      // 1. Plan: resolve + sample on Genius. If the cache already holds
+      //    enough, to_fetch comes back empty and we skip straight to stats.
+      const pool = await getArtistPool(n, m, false, sh, signal);
+      const total = pool.to_fetch.length;
+      // 2. Fetch each sampled song in turn, advancing the progress bar.
+      //    Sequential by design — keeps us within Genius rate limits.
+      for (let i = 0; i < total; i++) {
+        if (signal.aborted) return;
+        const ref = pool.to_fetch[i];
+        setProgress({ done: i, total, current: ref.title });
+        await fetchSongById(pool.name, ref, signal);
+      }
+      if (total > 0) setProgress({ done: total, total, current: "done" });
+      // 3. Aggregate from the now-populated cache.
+      const a = await getArtistStats(pool.name, m, sh, signal);
+      if (signal.aborted) return;
+      setData(a);
       setProgress(null);
-      try {
-        // 1. Plan: resolve + sample on Genius. If the cache already holds
-        //    enough, to_fetch comes back empty and we skip straight to stats.
-        const pool = await getArtistPool(n, m, false, sh);
-        const total = pool.to_fetch.length;
-        // 2. Fetch each sampled song in turn, advancing the progress bar.
-        //    Sequential by design — keeps us within Genius rate limits.
-        for (let i = 0; i < total; i++) {
-          const ref = pool.to_fetch[i];
-          setProgress({ done: i, total, current: ref.title });
-          await fetchSongById(pool.name, ref);
-        }
-        if (total > 0) setProgress({ done: total, total, current: "done" });
-        // 3. Aggregate from the now-populated cache.
-        const a = await getArtistStats(pool.name, m, sh);
-        setData(a);
-        setProgress(null);
-        saveLastArtist({ name: n, min: m, preferCache: true });
-      } catch (err) {
-        setError(friendlyError(err));
-        setData(null);
-      } finally {
+      saveLastArtist({ name: n, min: m, preferCache: true });
+    } catch (err) {
+      // A cancel surfaces as an AbortError — that's expected, not a failure.
+      if (signal.aborted || (err instanceof DOMException && err.name === "AbortError")) {
+        return;
+      }
+      setError(friendlyError(err));
+      setData(null);
+    } finally {
+      if (abortRef.current === ac) {
+        abortRef.current = null;
         setLoading(false);
       }
-    },
-    [],
-  );
+    }
+  }, []);
 
   useEffect(() => {
     if (urlName) {
@@ -107,12 +128,16 @@ function ArtistPageInner() {
     if (!name) return;
     // Fresh shuffle token on every Examine click → new random sample.
     const shuffle = Math.random().toString(36).slice(2, 10);
+    // Mark this key as handled so the URL change below doesn't double-run,
+    // then kick the search off directly (don't depend on param reactivity).
+    lastKey.current = `${name}|${min}|${shuffle}`;
     const q = new URLSearchParams({
       name,
       min: String(min),
       shuffle,
     }).toString();
     router.push(`/artist?${q}`);
+    run(name, min, shuffle);
   }
 
   return (
@@ -146,7 +171,7 @@ function ArtistPageInner() {
           />
         </label>
         <label className="block">
-          <span className="smallcaps mb-1 block">Songs at least</span>
+          <span className="smallcaps mb-1 block">Songs</span>
           <input
             className="field no-spin"
             type="number"
@@ -178,6 +203,18 @@ function ArtistPageInner() {
         </p>
       )}
 
+      {loading && (
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={cancel}
+            className="text-[0.72rem] uppercase tracking-[0.18em] text-ink-mute hover:text-accent transition-colors underline decoration-rule-strong underline-offset-4 hover:decoration-accent"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {error && (
         <ErrorNote err={error} onRetry={() => run(name, min, "")} />
       )}
@@ -191,8 +228,8 @@ function ArtistView({ data }: { data: ArtistPayload }) {
   const s = data.stats;
   const topSongs = [...data.songs].sort((a, b) => b.word_count - a.word_count);
   // Only show structure-derived figures when at least one sampled song has
-  // section tags ([Chorus] etc.) — plain lrclib/ovh lyrics don't carry them.
-  const hasSections = data.songs.some((song) => song.section_count > 0);
+  // real section tags ([Chorus] etc.) — plain lrclib/ovh lyrics don't carry them.
+  const hasSections = data.songs.some((song) => song.has_sections);
 
   return (
     <article className="mt-16 rise">

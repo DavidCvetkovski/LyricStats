@@ -182,7 +182,9 @@ def _aggregate_payload(name: str, n: int, shuffle: str) -> dict[str, Any]:
                 "chorus_ratio": st.chorus_ratio,
                 "repetition_ratio": st.repetition_ratio,
                 "line_count": st.line_count,
-                "section_count": st.section_count,
+                # Real structure only — untagged lyrics parse as a single
+                # "other" section, which doesn't count.
+                "has_sections": any(k != "other" for k in st.section_kinds),
             }
         )
 
