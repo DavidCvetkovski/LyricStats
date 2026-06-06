@@ -2,7 +2,12 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { streamArtist, type ArtistProgress } from "@/lib/api";
+import {
+  getArtistPool,
+  fetchSongById,
+  getArtistStats,
+  type ArtistProgress,
+} from "@/lib/api";
 import type { ArtistPayload } from "@/lib/types";
 import { StatFigure } from "@/components/StatFigure";
 import { WordTable } from "@/components/WordTable";
@@ -25,16 +30,12 @@ function ArtistPageInner() {
   const params = useSearchParams();
 
   const urlName = params.get("name") ?? "";
-  const urlMin = Math.max(1, Math.min(100, parseInt(params.get("min") ?? "20") || 20));
-  // Default behaviour: use the cache (fast). The toggle below opts INTO
-  // re-fetching, so it's unchecked unless you want fresh data.
-  const urlForceFetch = params.get("fresh") === "1";
+  const urlMin = Math.max(1, Math.min(500, parseInt(params.get("min") ?? "20") || 20));
   const urlShuffle = params.get("shuffle") ?? "";
 
   const [name, setName] = useState(urlName);
   const [minText, setMinText] = useState(String(urlMin));
   const min = clampMin(minText);
-  const [forceFetch, setForceFetch] = useState(urlForceFetch);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<ArtistProgress | null>(null);
   const [error, setError] = useState<FriendlyError | null>(null);
@@ -43,18 +44,29 @@ function ArtistPageInner() {
   const lastKey = useRef<string>("");
 
   const run = useCallback(
-    async (n: string, m: number, fresh: boolean, sh: string) => {
+    async (n: string, m: number, sh: string) => {
       if (!n) return;
       setLoading(true);
       setError(null);
       setProgress(null);
       try {
-        const a = await streamArtist(n, m, !fresh, sh, {
-          onProgress: (p) => setProgress(p),
-        });
+        // 1. Plan: resolve + sample on Genius. If the cache already holds
+        //    enough, to_fetch comes back empty and we skip straight to stats.
+        const pool = await getArtistPool(n, m, false, sh);
+        const total = pool.to_fetch.length;
+        // 2. Fetch each sampled song in turn, advancing the progress bar.
+        //    Sequential by design — keeps us within Genius rate limits.
+        for (let i = 0; i < total; i++) {
+          const ref = pool.to_fetch[i];
+          setProgress({ done: i, total, current: ref.title });
+          await fetchSongById(pool.name, ref);
+        }
+        if (total > 0) setProgress({ done: total, total, current: "done" });
+        // 3. Aggregate from the now-populated cache.
+        const a = await getArtistStats(pool.name, m, sh);
         setData(a);
         setProgress(null);
-        saveLastArtist({ name: n, min: m, preferCache: !fresh });
+        saveLastArtist({ name: n, min: m, preferCache: true });
       } catch (err) {
         setError(friendlyError(err));
         setData(null);
@@ -67,47 +79,39 @@ function ArtistPageInner() {
 
   useEffect(() => {
     if (urlName) {
-      const key = `${urlName}|${urlMin}|${urlForceFetch}|${urlShuffle}`;
+      const key = `${urlName}|${urlMin}|${urlShuffle}`;
       if (key === lastKey.current) return;
       lastKey.current = key;
       setName(urlName);
       setMinText(String(urlMin));
-      setForceFetch(urlForceFetch);
-      run(urlName, urlMin, urlForceFetch, urlShuffle);
+      run(urlName, urlMin, urlShuffle);
       return;
     }
     if (lastKey.current) return;
     const last = loadLastArtist();
     if (last) {
-      // Stored value is preferCache (true = use cache). Invert for the UI.
-      const fresh = last.preferCache === false;
-      lastKey.current = `${last.name}|${last.min}|${fresh}|`;
+      lastKey.current = `${last.name}|${last.min}|`;
       setName(last.name);
       setMinText(String(last.min));
-      setForceFetch(fresh);
-      const qParams: Record<string, string> = {
+      const q = new URLSearchParams({
         name: last.name,
         min: String(last.min),
-      };
-      if (fresh) qParams.fresh = "1";
-      const q = new URLSearchParams(qParams).toString();
+      }).toString();
       router.replace(`/artist?${q}`);
-      run(last.name, last.min, fresh, ""); // stable on restore — no shuffle
+      run(last.name, last.min, ""); // stable on restore — no shuffle
     }
-  }, [urlName, urlMin, urlForceFetch, urlShuffle, run, router]);
+  }, [urlName, urlMin, urlShuffle, run, router]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name) return;
     // Fresh shuffle token on every Examine click → new random sample.
     const shuffle = Math.random().toString(36).slice(2, 10);
-    const qParams: Record<string, string> = {
+    const q = new URLSearchParams({
       name,
       min: String(min),
       shuffle,
-    };
-    if (forceFetch) qParams.fresh = "1";
-    const q = new URLSearchParams(qParams).toString();
+    }).toString();
     router.push(`/artist?${q}`);
   }
 
@@ -148,7 +152,7 @@ function ArtistPageInner() {
             type="number"
             inputMode="numeric"
             min={1}
-            max={100}
+            max={500}
             value={minText}
             onChange={(e) => setMinText(e.target.value)}
             onBlur={() => setMinText(String(clampMin(minText)))}
@@ -157,45 +161,6 @@ function ArtistPageInner() {
         <button type="submit" className="pill" disabled={loading}>
           {loading ? "Filing…" : "Examine →"}
         </button>
-
-        {/* Editorial checkbox — empty box off, oxblood ✓ inside when on */}
-        <div className="sm:col-span-3 flex items-start gap-3 pt-1">
-          <button
-            type="button"
-            role="checkbox"
-            aria-checked={forceFetch}
-            onClick={() => setForceFetch((v) => !v)}
-            className="group inline-flex items-center gap-3 text-left"
-          >
-            <span
-              aria-hidden
-              className="relative inline-flex items-center justify-center w-[18px] h-[18px] border border-ink bg-paper transition-colors group-hover:border-accent shrink-0"
-            >
-              {forceFetch && (
-                <span
-                  className="font-serif text-accent leading-none"
-                  style={{
-                    fontSize: "18px",
-                    transform: "translateY(-1px)",
-                    fontWeight: 500,
-                  }}
-                >
-                  ✓
-                </span>
-              )}
-            </span>
-            <span className="flex flex-col">
-              <span className="text-[0.72rem] uppercase tracking-[0.18em] text-ink group-hover:text-accent transition-colors">
-                Fetch fresh from Genius
-              </span>
-              <span className="text-[0.72rem] italic font-serif text-ink-mute mt-0.5">
-                {forceFetch
-                  ? "on — will pull new songs from the wires"
-                  : "off — using what's already on file (fast)"}
-              </span>
-            </span>
-          </button>
-        </div>
       </form>
 
       {loading && progress && (
@@ -214,7 +179,7 @@ function ArtistPageInner() {
       )}
 
       {error && (
-        <ErrorNote err={error} onRetry={() => run(name, min, forceFetch, "")} />
+        <ErrorNote err={error} onRetry={() => run(name, min, "")} />
       )}
 
       {data && !loading && <ArtistView data={data} />}
@@ -225,6 +190,9 @@ function ArtistPageInner() {
 function ArtistView({ data }: { data: ArtistPayload }) {
   const s = data.stats;
   const topSongs = [...data.songs].sort((a, b) => b.word_count - a.word_count);
+  // Only show structure-derived figures when at least one sampled song has
+  // section tags ([Chorus] etc.) — plain lrclib/ovh lyrics don't carry them.
+  const hasSections = data.songs.some((song) => song.section_count > 0);
 
   return (
     <article className="mt-16 rise">
@@ -276,11 +244,13 @@ function ArtistView({ data }: { data: ArtistPayload }) {
           value={`${(s.avg_ttr * 100).toFixed(1)}%`}
           size="lg"
         />
-        <StatFigure
-          label="Avg. chorus share"
-          value={`${Math.round(s.avg_chorus_ratio * 100)}%`}
-          size="lg"
-        />
+        {hasSections && (
+          <StatFigure
+            label="Avg. chorus share"
+            value={`${Math.round(s.avg_chorus_ratio * 100)}%`}
+            size="lg"
+          />
+        )}
         <StatFigure
           label="Avg. repetition"
           value={`${Math.round(s.avg_repetition_ratio * 100)}%`}
@@ -394,9 +364,9 @@ function titleCase(s: string): string {
   return s.replace(/\w\S*/g, (t) => t[0].toUpperCase() + t.slice(1).toLowerCase());
 }
 
-/** Parse a possibly-empty text value into a 1..100 song count, defaulting to 20. */
+/** Parse a possibly-empty text value into a 1..500 song count, defaulting to 20. */
 function clampMin(text: string): number {
   const n = parseInt(text || "20", 10);
   if (Number.isNaN(n)) return 20;
-  return Math.max(1, Math.min(100, n));
+  return Math.max(1, Math.min(500, n));
 }
