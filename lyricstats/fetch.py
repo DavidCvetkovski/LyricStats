@@ -164,13 +164,28 @@ def _genius_api_get(path: str, params: dict[str, Any] | None = None) -> dict[str
 
 
 def _meta_from_api_song(d: dict[str, Any]) -> dict[str, Any]:
-    """Normalise a Genius API song object into the slim meta dict we pass around."""
+    """Normalise a Genius API song object into the slim meta dict we pass around.
+
+    Genius credits a song to a single ``primary_artist`` but co-leads (duos like
+    Jala Brat & Buba Corelli, or Voyage & Nucci) are listed in the *plural*
+    ``primary_artists``. We capture the full main-artist list so callers can tell
+    a true lead from a mere feature — e.g. "Bass" and "Balkan" are co-led, and
+    must count for *both* names, not just whichever Genius listed first.
+    """
     album = d.get("album")
     album_name = album.get("name") if isinstance(album, dict) else None
     year = (d.get("release_date_components") or {}).get("year")
     if not year:
         year = _year_from_str(d.get("release_date_for_display"))
     pa = d.get("primary_artist") or {}
+    primaries = d.get("primary_artists") or []
+    primary_ids = [p.get("id") for p in primaries if p.get("id")]
+    primary_names = [p.get("name") for p in primaries if p.get("name")]
+    # Fall back to the singular field if the plural one is absent/empty.
+    if not primary_ids and pa.get("id"):
+        primary_ids = [pa["id"]]
+    if not primary_names and pa.get("name"):
+        primary_names = [pa["name"]]
     return {
         "id": d.get("id"),
         "title": d.get("title") or "?",
@@ -180,6 +195,8 @@ def _meta_from_api_song(d: dict[str, Any]) -> dict[str, Any]:
         "artist_name": pa.get("name"),
         "artist_id": pa.get("id"),
         "artist_url": pa.get("url"),
+        "primary_artist_ids": primary_ids,
+        "primary_artist_names": primary_names,
     }
 
 
@@ -203,11 +220,20 @@ def search_artist_api(name: str) -> tuple[int, str, str | None]:
     return int(best["id"]), best.get("name") or name, best.get("url")
 
 
-def artist_songs_api(artist_id: int, pool_size: int = 1000) -> tuple[list[dict[str, Any]], bool]:
+def artist_songs_api(
+    artist_id: int, pool_size: int = 1000, *, main_only: bool = True
+) -> tuple[list[dict[str, Any]], bool]:
     """Page the artist's songs via the Genius API. Metadata only, no lyrics.
 
     Returns a tuple of (pool, reached_end) where reached_end is True if we
     finished paging all available songs from Genius.
+
+    The ``/artists/{id}/songs`` endpoint returns every song the artist touches —
+    lead, featured, producer or writer. With ``main_only`` (the default) we keep
+    only songs where the artist is a *main* artist (present in the song's
+    ``primary_artists`` list), so a guest-heavy artist's body of work isn't
+    diluted by tracks that are mostly someone else's. Co-led duo tracks still
+    count because both names live in ``primary_artists``.
     """
     pool: list[dict[str, Any]] = []
     page: int | None = 1
@@ -223,9 +249,13 @@ def artist_songs_api(artist_id: int, pool_size: int = 1000) -> tuple[list[dict[s
         if not songs:
             reached_end = True
             break
-        # Keep collaborations too (artists with frequent features would
-        # otherwise show almost-empty catalogues).
-        pool.extend(_meta_from_api_song(s) for s in songs if s.get("id"))
+        for s in songs:
+            if not s.get("id"):
+                continue
+            meta = _meta_from_api_song(s)
+            if main_only and artist_id not in meta["primary_artist_ids"]:
+                continue
+            pool.append(meta)
         page = resp.get("next_page")
         if not page:
             reached_end = True
@@ -234,14 +264,42 @@ def artist_songs_api(artist_id: int, pool_size: int = 1000) -> tuple[list[dict[s
     return pool, reached_end
 
 
+def _artist_is_main(target: str, primary_names: list[str]) -> bool:
+    """True if `target` matches one of the song's main (primary) artists.
+
+    Tolerant of partial names ("jala" ↔ "Jala Brat") so links carrying a
+    canonical db name and free-text searches both resolve.
+    """
+    t = target.strip().lower()
+    if not t:
+        return False
+    for n in primary_names:
+        n = (n or "").strip().lower()
+        if not n:
+            continue
+        if t == n or t in n or n in t:
+            return True
+    return False
+
+
 def search_song_api(artist: str, title: str) -> dict[str, Any] | None:
-    """Resolve a single song via the Genius API. Metadata only, no lyrics."""
+    """Resolve a single song via the Genius API. Metadata only, no lyrics.
+
+    Only returns a hit where `artist` is one of the song's *main* artists — a
+    feature/credit alone doesn't qualify. Genius parks duo tracks under a single
+    ``primary_artist`` but lists co-leads in ``primary_artists`` (plural), so we
+    match against that full list and skip hits where the artist is merely
+    featured.
+    """
     data = _genius_api_get("/search", {"q": f"{artist} {title}"})
     hits = data.get("response", {}).get("hits", [])
     for h in hits:
         res = h.get("result") or {}
-        if res.get("id"):
-            return _meta_from_api_song(res)
+        if not res.get("id"):
+            continue
+        meta = _meta_from_api_song(res)
+        if _artist_is_main(artist, meta["primary_artist_names"]):
+            return meta
     return None
 
 

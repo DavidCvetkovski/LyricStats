@@ -68,4 +68,9 @@ export type ArtistPayload = {
   stats: ArtistStats;
   cached_total: number;
   sampled: number;
+  // Present for precomputed dataset artists (whole-career aggregate, no
+  // per-song catalogue). `has_sections` is carried here because there's no
+  // per-song list to infer it from.
+  has_sections?: boolean;
+  source?: "dataset" | "cache" | "genius";
 };

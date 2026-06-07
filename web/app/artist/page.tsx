@@ -32,7 +32,7 @@ function ArtistPageInner() {
   const params = useSearchParams();
 
   const urlName = params.get("name") ?? "";
-  const urlMin = Math.max(1, Math.min(500, parseInt(params.get("min") ?? "20") || 20));
+  const urlMin = Math.max(1, Math.min(500, parseInt(params.get("min") ?? "500") || 500));
   const urlShuffle = params.get("shuffle") ?? "";
 
   const cached = artistCache.getLast();
@@ -42,15 +42,12 @@ function ArtistPageInner() {
     if (cached) return cached.data.name;
     return "";
   });
-  const [minText, setMinText] = useState(() => {
-    if (urlMin) return String(urlMin);
-    if (cached) return cached.key.split("|")[1] || "20";
-    return "20";
-  });
-  const min = clampMin(minText);
+  // Songs-count input removed — we always aggregate the whole catalogue.
+  const min = 500;
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<ArtistProgress | null>(null);
   const [error, setError] = useState<FriendlyError | null>(null);
+  const [suggestion, setSuggestion] = useState<string | null>(null);
   const [data, setData] = useState<ArtistPayload | null>(() => {
     if (cached) {
       const [cacheName, cacheMin, cacheShuffle] = cached.key.split("|");
@@ -80,6 +77,7 @@ function ArtistPageInner() {
       setLoading(false);
       setProgress(null);
       setError(null);
+      setSuggestion(null);
       return;
     }
     // Abort any in-flight run so a new search never gets stuck behind it.
@@ -92,10 +90,17 @@ function ArtistPageInner() {
     setError(null);
     setProgress(null);
     setData(null);
+    setSuggestion(null);
     try {
       // 1. Plan: resolve + sample on Genius. If the cache already holds
       //    enough, to_fetch comes back empty and we skip straight to stats.
       const pool = await getArtistPool(n, m, false, sh, signal);
+      // Typo with no exact match but a close dataset artist → offer it and stop.
+      if (pool.suggestion) {
+        if (signal.aborted) return;
+        setSuggestion(pool.suggestion);
+        return;
+      }
       const total = pool.to_fetch.length;
       // 2. Fetch each sampled song in turn, advancing the progress bar.
       //    Sequential by design — keeps us within Genius rate limits.
@@ -134,7 +139,6 @@ function ArtistPageInner() {
       if (key === lastKey.current) return;
       lastKey.current = key;
       setName(urlName);
-      setMinText(String(urlMin));
       run(urlName, urlMin, urlShuffle);
       return;
     }
@@ -143,14 +147,12 @@ function ArtistPageInner() {
     if (last) {
       lastKey.current = `${last.name}|${last.min}|`;
       setName(last.name);
-      setMinText(String(last.min));
     }
   }, [urlName, urlMin, urlShuffle, run]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name) return;
-    setMinText(String(min));
     // Fresh shuffle token on every Examine click → new random sample.
     const shuffle = Math.random().toString(36).slice(2, 10);
     // Mark this key as handled so the URL change below doesn't double-run,
@@ -182,7 +184,7 @@ function ArtistPageInner() {
 
       <form
         onSubmit={onSubmit}
-        className="mt-8 sm:mt-10 grid gap-6 sm:gap-8 sm:grid-cols-[2fr_1fr_auto] items-end"
+        className="mt-8 sm:mt-10 grid gap-6 sm:gap-8 sm:grid-cols-[1fr_auto] items-end"
       >
         <label className="block">
           <span className="smallcaps mb-1 block">The Artist</span>
@@ -193,18 +195,6 @@ function ArtistPageInner() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoFocus
-          />
-        </label>
-        <label className="block">
-          <span className="smallcaps mb-1 block">Songs</span>
-          <input
-            className="field no-spin"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            value={minText}
-            onChange={(e) => setMinText(e.target.value)}
-            onBlur={() => setMinText(String(clampMin(minText)))}
           />
         </label>
         <button type="submit" className="pill" disabled={loading}>
@@ -237,6 +227,29 @@ function ArtistPageInner() {
             Cancel
           </button>
         </div>
+      )}
+
+      {suggestion && !loading && !data && (
+        <p className="mt-10 font-serif text-lg sm:text-xl text-ink-soft text-center">
+          No exact match. Did you mean{" "}
+          <button
+            type="button"
+            onClick={() => {
+              setName(suggestion);
+              setSuggestion(null);
+              const shuffle = Math.random().toString(36).slice(2, 10);
+              lastKey.current = `${suggestion}|${min}|${shuffle}`;
+              router.push(
+                `/artist?${new URLSearchParams({ name: suggestion, min: String(min), shuffle }).toString()}`,
+              );
+              run(suggestion, min, shuffle);
+            }}
+            className="italic text-accent underline decoration-rule-strong underline-offset-4 hover:decoration-accent"
+          >
+            {suggestion}
+          </button>
+          ?
+        </p>
       )}
 
       {error && (
@@ -294,9 +307,12 @@ function ArtistView({ data }: { data: ArtistPayload }) {
       return 0;
     });
 
-  // Only show structure-derived figures when at least one sampled song has
-  // real section tags ([Chorus] etc.) — plain lrclib/ovh lyrics don't carry them.
-  const hasSections = data.songs.some((song) => song.has_sections);
+  // Only show structure-derived figures when there's real section data.
+  // Dataset artists carry it at the payload level (no per-song list to infer
+  // from); lyrics-backed artists infer it from the sampled songs.
+  const hasSections = data.has_sections ?? data.songs.some((song) => song.has_sections);
+  // Dataset aggregates have no per-song catalogue to show.
+  const hasCatalogue = data.songs.length > 0;
 
   return (
     <article className="mt-16 rise">
@@ -401,6 +417,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
         <WordTable title="Most-used Words" rows={s.top_words_no_stop} max={20} />
       </section>
 
+      {hasCatalogue && (
       <section className="mt-16 sm:mt-20">
         <div className="flex flex-col md:flex-row md:items-baseline justify-between gap-6 mb-6">
           <h3
@@ -540,6 +557,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
         }
         </div>
       </section>
+      )}
     </article>
   );
 }
@@ -575,11 +593,4 @@ function Mini({ label, value }: { label: string; value: string }) {
 
 function titleCase(s: string): string {
   return s.replace(/\w\S*/g, (t) => t[0].toUpperCase() + t.slice(1).toLowerCase());
-}
-
-/** Parse a possibly-empty text value into a 1..500 song count, defaulting to 20. */
-function clampMin(text: string): number {
-  const n = parseInt(text || "20", 10);
-  if (Number.isNaN(n)) return 20;
-  return Math.max(1, Math.min(500, n));
 }

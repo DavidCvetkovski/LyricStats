@@ -8,12 +8,27 @@ Tables:
 from __future__ import annotations
 
 import json
+import unicodedata
 from datetime import datetime
 from typing import Optional
 
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 from .config import DATABASE_URL, DB_PATH
+
+
+def normalize_key(name: str) -> str:
+    """Aggressive normalisation for 'is this obviously the same artist?' matching.
+
+    Strips accents, lowercases, and drops every non-alphanumeric character so
+    casing/punctuation/spacing differences collapse to one key:
+      'JAY-Z' / 'jay z' → 'jayz';  'Beyoncé' → 'beyonce';
+      'Tyler, the Creator' / 'tyler the creator' → 'tylerthecreator'.
+    An exact match on this key is treated as 'very close' (auto-load).
+    """
+    s = unicodedata.normalize("NFKD", name or "")
+    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
+    return "".join(c for c in s if c.isalnum())
 
 
 class Artist(SQLModel, table=True):
@@ -36,6 +51,28 @@ class Song(SQLModel, table=True):
     lyrics: str = ""
     stats_json: Optional[str] = None  # cached computed stats
     fetched_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ArtistAggregate(SQLModel, table=True):
+    """Precomputed career-wide stats for an artist, imported in bulk from a
+    lyrics dataset (no per-song lyrics stored).
+
+    This powers instant artist lookup: the browser sends just a name and gets
+    the whole-catalogue aggregate back with zero Genius/lyric fetches. Kept
+    separate from Artist/Song so the lyrics-backed flow (Balkan seeds, on-demand
+    song pages) is untouched. ``stats_json`` holds the full ArtistStats payload;
+    the scalar columns exist for indexing/filtering and size accounting.
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True, unique=True)       # _norm (strip+lower) key
+    name_key: str = Field(default="", index=True)    # aggressive key for fuzzy/auto match
+    display_name: str                                 # original casing for display
+    song_count: int = Field(default=0, index=True)
+    has_sections: bool = Field(default=False)
+    stats_json: str = ""                              # full ArtistStats.to_dict()
+    source: str = Field(default="dataset")
+    built_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 def _make_engine():
@@ -211,3 +248,119 @@ def mark_catalogue_fetched(artist: Artist) -> None:
         row.catalogue_fetched_at = datetime.utcnow()
         s.add(row)
         s.commit()
+
+
+# ---- precomputed artist aggregates (dataset import) ------------------------
+
+
+def get_artist_aggregate(name: str) -> "ArtistAggregate | None":
+    """Exact-or-very-close lookup: matches on the aggressive name_key so
+    casing/accents/punctuation differences auto-resolve. On the rare key
+    collision, prefer the artist with the larger catalogue."""
+    key = normalize_key(name)
+    if not key:
+        return None
+    with session() as s:
+        return s.exec(
+            select(ArtistAggregate)
+            .where(ArtistAggregate.name_key == key)
+            .order_by(ArtistAggregate.song_count.desc())  # type: ignore[attr-defined]
+        ).first()
+
+
+def suggest_artist_aggregates(name: str, limit: int = 1) -> list["ArtistAggregate"]:
+    """Looser 'did you mean?' candidates for a typo with no exact key match.
+
+    Postgres uses pg_trgm similarity (set up at sync time); SQLite falls back to
+    a difflib ratio over candidate names sharing a prefix/substring. Returns the
+    best matches above a similarity floor, most-songs first as a tiebreak.
+    """
+    key = normalize_key(name)
+    if len(key) < 3:
+        return []
+
+    if DATABASE_URL:
+        from sqlalchemy import text  # noqa: PLC0415
+
+        with session() as s:
+            rows = s.exec(  # type: ignore[call-overload]
+                text(
+                    "SELECT * FROM artistaggregate "
+                    "WHERE similarity(name_key, :q) > 0.4 "
+                    "ORDER BY similarity(name_key, :q) DESC, song_count DESC "
+                    "LIMIT :lim"
+                ).bindparams(q=key, lim=limit)
+            ).all()
+            return list(rows)
+
+    # SQLite fallback: difflib over a coarse candidate set (cheap prefiltering
+    # by shared 3-char prefix keeps this from scanning the whole table).
+    import difflib  # noqa: PLC0415
+
+    prefix = key[:3]
+    with session() as s:
+        candidates = s.exec(
+            select(ArtistAggregate).where(ArtistAggregate.name_key.like(f"{prefix}%"))  # type: ignore[attr-defined]
+        ).all()
+    scored = [
+        (difflib.SequenceMatcher(None, key, c.name_key).ratio(), c) for c in candidates
+    ]
+    scored = [sc for sc in scored if sc[0] > 0.6]
+    scored.sort(key=lambda sc: (sc[0], sc[1].song_count), reverse=True)
+    return [c for _, c in scored[:limit]]
+
+
+def upsert_artist_aggregate(
+    *,
+    name: str,
+    display_name: str,
+    song_count: int,
+    has_sections: bool,
+    stats: dict,
+    source: str = "dataset",
+) -> None:
+    key = _norm(name)
+    nkey = normalize_key(name)
+    payload = json.dumps(stats, ensure_ascii=False)
+    with session() as s:
+        existing = s.exec(
+            select(ArtistAggregate).where(ArtistAggregate.name == key)
+        ).first()
+        if existing:
+            existing.name_key = nkey
+            existing.display_name = display_name
+            existing.song_count = song_count
+            existing.has_sections = has_sections
+            existing.stats_json = payload
+            existing.source = source
+            existing.built_at = datetime.utcnow()
+            s.add(existing)
+        else:
+            s.add(
+                ArtistAggregate(
+                    name=key,
+                    name_key=nkey,
+                    display_name=display_name,
+                    song_count=song_count,
+                    has_sections=has_sections,
+                    stats_json=payload,
+                    source=source,
+                )
+            )
+        s.commit()
+
+
+def reset_aggregates() -> None:
+    """Drop and recreate the ArtistAggregate table for a clean full re-import
+    (also picks up schema changes like the name_key column locally)."""
+    ArtistAggregate.__table__.drop(_engine, checkfirst=True)  # type: ignore[attr-defined]
+    ArtistAggregate.__table__.create(_engine)  # type: ignore[attr-defined]
+
+
+def load_aggregate_stats(agg: "ArtistAggregate") -> dict | None:
+    if not agg.stats_json:
+        return None
+    try:
+        return json.loads(agg.stats_json)
+    except json.JSONDecodeError:
+        return None

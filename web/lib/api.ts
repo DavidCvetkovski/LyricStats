@@ -46,6 +46,8 @@ export type ArtistPool = {
   genius_url: string | null;
   to_fetch: ArtistSongRef[];
   cached_total: number;
+  // Set when the typed name didn't match but a close dataset artist exists.
+  suggestion?: string;
 };
 
 /** Plan a fetch: which songs (if any) the client must fetch one-by-one. */

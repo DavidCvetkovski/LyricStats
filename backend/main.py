@@ -219,6 +219,27 @@ def _aggregate_payload(name: str, n: int, shuffle: str) -> dict[str, Any]:
     }
 
 
+def _dataset_payload(agg: db.ArtistAggregate) -> dict[str, Any]:
+    """Build the ArtistPayload shape from a precomputed dataset aggregate.
+
+    No per-song catalogue and no Genius URL — just the whole-career figures,
+    served instantly with zero lyric fetches. `has_sections` is carried at the
+    payload level (rather than inferred from a per-song list) so the frontend
+    can still gate chorus-share on it.
+    """
+    stats = db.load_aggregate_stats(agg) or {}
+    return {
+        "name": agg.display_name,
+        "genius_url": None,
+        "songs": [],
+        "stats": stats,
+        "cached_total": agg.song_count,
+        "sampled": agg.song_count,
+        "has_sections": agg.has_sections,
+        "source": "dataset",
+    }
+
+
 @app.get("/api/artist/pool")
 def artist_pool(
     name: str = Query(..., min_length=1),
@@ -248,6 +269,30 @@ def artist_pool(
             "genius_url": existing.genius_url if existing else None,
             "to_fetch": [],
             "cached_total": len(cached_valid),
+        }
+
+    # Precomputed dataset aggregate: answer instantly, fetch nothing. The
+    # browser sees an empty to_fetch and skips straight to /api/artist, which
+    # returns the whole-career figures from the ArtistAggregate table.
+    agg = db.get_artist_aggregate(name)
+    if agg:
+        return {
+            "name": agg.display_name,
+            "genius_url": None,
+            "to_fetch": [],
+            "cached_total": agg.song_count,
+        }
+
+    # Looser typo with no exact key match: offer a 'did you mean?' from the
+    # dataset rather than dropping into a slow live Genius fetch.
+    suggestions = db.suggest_artist_aggregates(name, limit=1)
+    if suggestions:
+        return {
+            "name": name,
+            "genius_url": None,
+            "to_fetch": [],
+            "cached_total": 0,
+            "suggestion": suggestions[0].display_name,
         }
 
     try:
@@ -315,7 +360,13 @@ def artist(
     """
     try:
         return _aggregate_payload(name, n=min, shuffle=shuffle)
-    except HTTPException:
+    except HTTPException as e:
+        # No lyrics-backed catalogue cached — fall back to the precomputed
+        # dataset aggregate (instant, no fetches) if we have one.
+        if e.status_code == 404:
+            agg = db.get_artist_aggregate(name)
+            if agg:
+                return _dataset_payload(agg)
         raise
     except Exception as e:  # noqa: BLE001
         log.exception("aggregate failed")
