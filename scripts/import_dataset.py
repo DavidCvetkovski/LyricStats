@@ -62,17 +62,30 @@ ARTIST_BLOCKLIST_SUBSTR = (
 
 _CHORUS_KINDS = {"chorus", "hook", "refrain"}
 
-# Genius pages that aren't songs (interviews, discographies, etc.) leak into the
-# dataset and, being long, sort to the top of a catalogue. Drop them by title.
+# Genius pages that aren't songs (interviews, scripts, speeches, discographies,
+# award-show transcripts, etc.) leak into the dataset and, being long, sort to
+# the top of a catalogue. Drop them by title…
 _NON_SONG_SUBSTR = (
     "interview", "discography", "tracklist", "tracklisting", "booklet",
     "conference call", "setlist", "annotated", "tour dates", "album art",
     "cover art", "liner notes", "press release", "(album)", "full album",
     "q&a", "biography", "snippet", "teaser",
+    # scripts / spoken / events
+    "script", "screenplay", "monologue", "speech", "acceptance",
+    "transcript", "commencement", "eulogy", "ted talk", "press conference",
+    "manifesto", "open letter", "statement", "essay", "poem",
+    "vmas", "vma performance", "bet awards", "grammy", "oscars", "super bowl",
+    "halftime", "medley", "documentary", "trailer", "announcement",
 )
 
+# …and by length: real songs are short. Anything past this is almost always a
+# script/interview/full-album-text that slipped the title filter.
+MAX_SONG_WORDS = 2000
 
-def is_non_song(title: str) -> bool:
+
+def is_non_song(title: str, word_count: int = 0) -> bool:
+    if word_count and word_count > MAX_SONG_WORDS:
+        return True
     t = (title or "").lower()
     return any(p in t for p in _NON_SONG_SUBSTR)
 
@@ -251,8 +264,9 @@ def _build_aggregate(rows: list, *, min_songs: int, top_n: int):
     few songs. Rows are grouped by normalised (trim+lower) name, so casing
     variants ('Johnnyswim' / 'JOHNNYSWIM') merge into one artist; the display
     name is the most common raw spelling. No DB write here — caller batches."""
-    # Drop interview/discography/tracklist pages before anything counts.
-    rows = [r for r in rows if not is_non_song(r["title"])]
+    # Drop non-songs (by title) and over-long pages (scripts/interviews) before
+    # anything counts toward stats, highlights, or the catalogue.
+    rows = [r for r in rows if not is_non_song(r["title"], r["wc"])]
     n = len(rows)
     if n < min_songs:
         return None
