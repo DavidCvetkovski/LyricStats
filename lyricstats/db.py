@@ -71,6 +71,10 @@ class ArtistAggregate(SQLModel, table=True):
     song_count: int = Field(default=0, index=True)
     has_sections: bool = Field(default=False)
     stats_json: str = ""                              # full ArtistStats.to_dict()
+    # Compact per-song list for the catalogue: JSON array of
+    # [title, year, word_count, unique_words, ttr, chorus_ratio, rep_ratio, has_sec].
+    # No lyrics — song pages still fetch those live.
+    songs_json: str = ""
     source: str = Field(default="dataset")
     built_at: datetime = Field(default_factory=datetime.utcnow)
 

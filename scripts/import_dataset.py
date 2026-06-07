@@ -62,6 +62,20 @@ ARTIST_BLOCKLIST_SUBSTR = (
 
 _CHORUS_KINDS = {"chorus", "hook", "refrain"}
 
+# Genius pages that aren't songs (interviews, discographies, etc.) leak into the
+# dataset and, being long, sort to the top of a catalogue. Drop them by title.
+_NON_SONG_SUBSTR = (
+    "interview", "discography", "tracklist", "tracklisting", "booklet",
+    "conference call", "setlist", "annotated", "tour dates", "album art",
+    "cover art", "liner notes", "press release", "(album)", "full album",
+    "q&a", "biography", "snippet", "teaser",
+)
+
+
+def is_non_song(title: str) -> bool:
+    t = (title or "").lower()
+    return any(p in t for p in _NON_SONG_SUBSTR)
+
 
 def is_junk_artist(name: str) -> bool:
     n = name.strip().lower()
@@ -237,6 +251,8 @@ def _build_aggregate(rows: list, *, min_songs: int, top_n: int):
     few songs. Rows are grouped by normalised (trim+lower) name, so casing
     variants ('Johnnyswim' / 'JOHNNYSWIM') merge into one artist; the display
     name is the most common raw spelling. No DB write here — caller batches."""
+    # Drop interview/discography/tracklist pages before anything counts.
+    rows = [r for r in rows if not is_non_song(r["title"])]
     n = len(rows)
     if n < min_songs:
         return None
@@ -262,6 +278,13 @@ def _build_aggregate(rows: list, *, min_songs: int, top_n: int):
         "top_words_no_stop": top_words_no_stop,
         **_highlights([(r["title"], r["wc"], r["ttr"]) for r in rows]),
     }
+    # Compact per-song list for the catalogue (no lyrics). Order doesn't matter
+    # — the UI sorts client-side; store largest-first so it reads sensibly raw.
+    songs_list = sorted(
+        ([r["title"], r["year"], r["wc"], r["uniq"], r["ttr"],
+          r["chorus"], r["rep"], int(r["has_sec"])] for r in rows),
+        key=lambda x: x[2], reverse=True,
+    )
     return db.ArtistAggregate(
         name=display_name.strip().lower(),
         name_key=db.normalize_key(display_name),
@@ -269,6 +292,7 @@ def _build_aggregate(rows: list, *, min_songs: int, top_n: int):
         song_count=n,
         has_sections=any(r["has_sec"] for r in rows),
         stats_json=json.dumps(stats, ensure_ascii=False),
+        songs_json=json.dumps(songs_list, ensure_ascii=False),
         source="dataset",
     )
 

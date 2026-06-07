@@ -8,6 +8,7 @@ calling `/api/artist/pool` once, then `/api/song/by-id` per song, then
 
 from __future__ import annotations
 
+import json
 import logging
 import random
 from typing import Any
@@ -222,19 +223,37 @@ def _aggregate_payload(name: str, n: int, shuffle: str) -> dict[str, Any]:
 def _dataset_payload(agg: db.ArtistAggregate) -> dict[str, Any]:
     """Build the ArtistPayload shape from a precomputed dataset aggregate.
 
-    No per-song catalogue and no Genius URL — just the whole-career figures,
-    served instantly with zero lyric fetches. `has_sections` is carried at the
-    payload level (rather than inferred from a per-song list) so the frontend
-    can still gate chorus-share on it.
+    Carries the whole-career figures plus a compact per-song catalogue (no
+    lyrics — song pages fetch those live), served instantly with zero lyric
+    fetches. `has_sections` is at the payload level so chorus-share still gates.
     """
     stats = db.load_aggregate_stats(agg) or {}
+    songs: list[dict[str, Any]] = []
+    if agg.songs_json:
+        try:
+            for row in json.loads(agg.songs_json):
+                title, year, wc, uniq, ttr, chorus, rep, has_sec = row
+                songs.append({
+                    "title": title,
+                    "album": None,
+                    "year": year,
+                    "word_count": wc,
+                    "unique_words": uniq,
+                    "type_token_ratio": ttr,
+                    "chorus_ratio": chorus,
+                    "repetition_ratio": rep,
+                    "line_count": 0,
+                    "has_sections": bool(has_sec),
+                })
+        except (ValueError, TypeError):
+            songs = []
     return {
         "name": agg.display_name,
         "genius_url": None,
-        "songs": [],
+        "songs": songs,
         "stats": stats,
         "cached_total": agg.song_count,
-        "sampled": agg.song_count,
+        "sampled": len(songs) or agg.song_count,
         "has_sections": agg.has_sections,
         "source": "dataset",
     }

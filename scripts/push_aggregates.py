@@ -61,6 +61,7 @@ def main() -> None:
                 "song_count": r.song_count,
                 "has_sections": r.has_sections,
                 "stats_json": r.stats_json,
+                "songs_json": r.songs_json,
                 "source": r.source,
                 "built_at": r.built_at,
             }
