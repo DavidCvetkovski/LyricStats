@@ -126,6 +126,7 @@ function ArtistPageInner() {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name) return;
+    setMinText(String(min));
     // Fresh shuffle token on every Examine click → new random sample.
     const shuffle = Math.random().toString(36).slice(2, 10);
     // Mark this key as handled so the URL change below doesn't double-run,
@@ -177,7 +178,6 @@ function ArtistPageInner() {
             type="number"
             inputMode="numeric"
             min={1}
-            max={500}
             value={minText}
             onChange={(e) => setMinText(e.target.value)}
             onBlur={() => setMinText(String(clampMin(minText)))}

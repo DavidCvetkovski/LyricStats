@@ -64,3 +64,20 @@ def test_aggregate_over_multiple_songs():
     assert a.song_count == 2
     assert a.total_words == compute(SAMPLE).word_count * 2
     assert a.longest_song["words"] == compute(SAMPLE).word_count
+
+
+def test_aggregate_excludes_short_and_demo_songs_from_highlights():
+    long_song = "Normal Song Name\n" + "hello world " * 100
+    short_song = "Short Song Name\n" + "hello world " * 20
+    demo_song = "Some Track (Demo)\n" + "unique word " * 150
+    
+    a = aggregate([
+        ("Long Song", long_song),
+        ("Short Song", short_song),
+        ("Demo Song (Demo)", demo_song)
+    ])
+    
+    assert a.shortest_song["title"] == "Long Song"
+    assert a.richest_song["title"] == "Long Song"
+    assert a.longest_song["title"] == "Long Song"
+

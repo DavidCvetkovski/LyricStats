@@ -78,7 +78,11 @@ def _migrate() -> None:
                 conn.execute(text("ALTER TABLE artist ADD COLUMN total_songs INTEGER"))
 
 
-_migrate()
+# Only run migrations locally on SQLite. The production Postgres database is
+# already migrated; skipping inspection eliminates unnecessary network queries
+# and latency during serverless cold starts.
+if not DATABASE_URL:
+    _migrate()
 
 
 def session() -> Session:

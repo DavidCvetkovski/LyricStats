@@ -5,23 +5,19 @@ export function Colophon() {
         <div>
           <p className="smallcaps text-ink mb-2">Colophon</p>
           <p>
-            Set in Fraunces &amp; Inter. Printed digitally on a paper of
-            warm linen.
+            Set in Fraunces &amp; Inter. Rendered in digital ink on a screen near you.
           </p>
         </div>
         <div>
           <p className="smallcaps text-ink mb-2">Method</p>
           <p>
-            Catalogues indexed via the Genius API; lyrics sourced from Genius,
-            lrclib &amp; lyrics.ovh. Statistics computed in Python, cached, and
-            served fresh.
+            Counting the beats and the syllables, separating the poetry from the noise.
           </p>
         </div>
         <div>
-          <p className="smallcaps text-ink mb-2">Reading</p>
+          <p className="smallcaps text-ink mb-2">Rights</p>
           <p>
-            Source-available under <span className="italic">PolyForm Noncommercial</span>.
-            No part may be sold without express permission.
+            Free to read, share, and enjoy. No part of this publication may be sold.
           </p>
         </div>
       </div>

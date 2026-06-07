@@ -204,9 +204,20 @@ def aggregate(songs_with_lyrics: list[tuple[str, str]], *, top_n: int = 30) -> A
         (w, c) for w, c in global_counts.most_common(top_n * 3) if w not in STOPWORDS
     ][:top_n]
 
-    longest = max(per_song, key=lambda ps: ps[1].word_count)
-    shortest = min(per_song, key=lambda ps: ps[1].word_count)
-    richest = max(per_song, key=lambda ps: ps[1].type_token_ratio)
+    # Filter out short songs/demos/snippets from highlights to avoid skewing stats (e.g. 21-word demos winning widest vocabulary)
+    highlights_eligible = [
+        (title, s) for title, s in per_song
+        if s.word_count >= 80 and not any(
+            kw in title.lower()
+            for kw in ["(demo)", "[demo]", "(snippet)", "[snippet]", "(teaser)", "[teaser]", "(promo)", "[promo]", "(skit)", "[skit]"]
+        )
+    ]
+    if not highlights_eligible:
+        highlights_eligible = per_song
+
+    longest = max(highlights_eligible, key=lambda ps: ps[1].word_count)
+    shortest = min(highlights_eligible, key=lambda ps: ps[1].word_count)
+    richest = max(highlights_eligible, key=lambda ps: ps[1].type_token_ratio)
     out.longest_song = {"title": longest[0], "words": longest[1].word_count}
     out.shortest_song = {"title": shortest[0], "words": shortest[1].word_count}
     out.richest_song = {"title": richest[0], "ttr": richest[1].type_token_ratio}
