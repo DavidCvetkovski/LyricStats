@@ -24,7 +24,7 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LyricStats — a quarterly of words",
+  title: "LyricStats",
   description: "Stats for lyrics, per song and per artist.",
 };
 
