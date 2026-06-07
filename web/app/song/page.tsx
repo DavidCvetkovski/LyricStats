@@ -19,6 +19,11 @@ export default function SongPage() {
   );
 }
 
+let cachedSongData: {
+  key: string;
+  data: SongPayload;
+} | null = null;
+
 function SongPageInner() {
   const router = useRouter();
   const params = useSearchParams();
@@ -36,11 +41,19 @@ function SongPageInner() {
 
   const run = useCallback(async (a: string, t: string) => {
     if (!a || !t) return;
+    const key = `${a}|${t}`;
+    if (cachedSongData && cachedSongData.key === key) {
+      setSong(cachedSongData.data);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const s = await getSong(a, t);
       setSong(s);
+      cachedSongData = { key, data: s };
       saveLastSong({ artist: a, title: t });
     } catch (err) {
       setError(friendlyError(err));
@@ -67,11 +80,8 @@ function SongPageInner() {
       lastKey.current = `${last.artist}|${last.title}`;
       setArtist(last.artist);
       setTitle(last.title);
-      const q = new URLSearchParams({ artist: last.artist, title: last.title }).toString();
-      router.replace(`/song?${q}`);
-      run(last.artist, last.title);
     }
-  }, [urlArtist, urlTitle, run, router]);
+  }, [urlArtist, urlTitle, run]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();

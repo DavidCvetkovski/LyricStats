@@ -25,6 +25,11 @@ export default function ArtistPage() {
   );
 }
 
+let cachedArtistData: {
+  key: string;
+  data: ArtistPayload;
+} | null = null;
+
 function ArtistPageInner() {
   const router = useRouter();
   const params = useSearchParams();
@@ -53,6 +58,14 @@ function ArtistPageInner() {
 
   const run = useCallback(async (n: string, m: number, sh: string) => {
     if (!n) return;
+    const key = `${n}|${m}|${sh}`;
+    if (cachedArtistData && cachedArtistData.key === key) {
+      setData(cachedArtistData.data);
+      setLoading(false);
+      setProgress(null);
+      setError(null);
+      return;
+    }
     // Abort any in-flight run so a new search never gets stuck behind it.
     abortRef.current?.abort();
     const ac = new AbortController();
@@ -81,6 +94,7 @@ function ArtistPageInner() {
       const a = await getArtistStats(pool.name, m, sh, signal);
       if (signal.aborted) return;
       setData(a);
+      cachedArtistData = { key, data: a };
       setProgress(null);
       saveLastArtist({ name: n, min: m, preferCache: true });
     } catch (err) {
@@ -114,14 +128,8 @@ function ArtistPageInner() {
       lastKey.current = `${last.name}|${last.min}|`;
       setName(last.name);
       setMinText(String(last.min));
-      const q = new URLSearchParams({
-        name: last.name,
-        min: String(last.min),
-      }).toString();
-      router.replace(`/artist?${q}`);
-      run(last.name, last.min, ""); // stable on restore — no shuffle
     }
-  }, [urlName, urlMin, urlShuffle, run, router]);
+  }, [urlName, urlMin, urlShuffle, run]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
