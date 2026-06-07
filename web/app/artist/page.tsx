@@ -16,6 +16,7 @@ import { ProgressLine } from "@/components/ProgressLine";
 import { loadLastArtist, saveLastArtist } from "@/lib/lastSearch";
 import { friendlyError, type FriendlyError } from "@/lib/errors";
 import { ErrorNote } from "@/components/ErrorNote";
+import { artistCache } from "@/lib/cache";
 
 export default function ArtistPage() {
   return (
@@ -25,11 +26,6 @@ export default function ArtistPage() {
   );
 }
 
-let cachedArtistData: {
-  key: string;
-  data: ArtistPayload;
-} | null = null;
-
 function ArtistPageInner() {
   const router = useRouter();
   const params = useSearchParams();
@@ -38,15 +34,33 @@ function ArtistPageInner() {
   const urlMin = Math.max(1, Math.min(500, parseInt(params.get("min") ?? "20") || 20));
   const urlShuffle = params.get("shuffle") ?? "";
 
-  const [name, setName] = useState(urlName);
-  const [minText, setMinText] = useState(String(urlMin));
+  const cached = artistCache.getLast();
+
+  const [name, setName] = useState(() => {
+    if (urlName) return urlName;
+    if (cached) return cached.data.name;
+    return "";
+  });
+  const [minText, setMinText] = useState(() => {
+    if (urlMin) return String(urlMin);
+    if (cached) return cached.key.split("|")[1] || "20";
+    return "20";
+  });
   const min = clampMin(minText);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<ArtistProgress | null>(null);
   const [error, setError] = useState<FriendlyError | null>(null);
-  const [data, setData] = useState<ArtistPayload | null>(null);
+  const [data, setData] = useState<ArtistPayload | null>(() => {
+    if (cached) {
+      const [cacheName, cacheMin, cacheShuffle] = cached.key.split("|");
+      if (!urlName || (urlName === cacheName && String(urlMin) === cacheMin && urlShuffle === cacheShuffle)) {
+        return cached.data;
+      }
+    }
+    return null;
+  });
 
-  const lastKey = useRef<string>("");
+  const lastKey = useRef<string>(cached ? cached.key : "");
   const abortRef = useRef<AbortController | null>(null);
 
   const cancel = useCallback(() => {
@@ -59,8 +73,9 @@ function ArtistPageInner() {
   const run = useCallback(async (n: string, m: number, sh: string) => {
     if (!n) return;
     const key = `${n}|${m}|${sh}`;
-    if (cachedArtistData && cachedArtistData.key === key) {
-      setData(cachedArtistData.data);
+    const cachedData = artistCache.get(key);
+    if (cachedData) {
+      setData(cachedData);
       setLoading(false);
       setProgress(null);
       setError(null);
@@ -94,7 +109,7 @@ function ArtistPageInner() {
       const a = await getArtistStats(pool.name, m, sh, signal);
       if (signal.aborted) return;
       setData(a);
-      cachedArtistData = { key, data: a };
+      artistCache.set(key, a);
       setProgress(null);
       saveLastArtist({ name: n, min: m, preferCache: true });
     } catch (err) {

@@ -81,3 +81,17 @@ def test_aggregate_excludes_short_and_demo_songs_from_highlights():
     assert a.richest_song["title"] == "Long Song"
     assert a.longest_song["title"] == "Long Song"
 
+
+def test_aggregate_fallback_when_no_songs_eligible_for_highlights():
+    short_song_1 = "Short 1\n" + "hello world " * 20
+    short_song_2 = "Short 2\n" + "hello world " * 30
+    
+    a = aggregate([
+        ("Short 1", short_song_1),
+        ("Short 2", short_song_2),
+    ])
+    
+    assert a.longest_song["title"] == "Short 2"
+    assert a.shortest_song["title"] == "Short 1"
+
+

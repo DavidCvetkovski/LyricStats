@@ -10,6 +10,7 @@ import { PullQuote } from "@/components/PullQuote";
 import { loadLastSong, saveLastSong } from "@/lib/lastSearch";
 import { friendlyError, type FriendlyError } from "@/lib/errors";
 import { ErrorNote } from "@/components/ErrorNote";
+import { songCache } from "@/lib/cache";
 
 export default function SongPage() {
   return (
@@ -19,11 +20,6 @@ export default function SongPage() {
   );
 }
 
-let cachedSongData: {
-  key: string;
-  data: SongPayload;
-} | null = null;
-
 function SongPageInner() {
   const router = useRouter();
   const params = useSearchParams();
@@ -31,19 +27,38 @@ function SongPageInner() {
   const urlArtist = params.get("artist") ?? "";
   const urlTitle = params.get("title") ?? "";
 
-  const [artist, setArtist] = useState(urlArtist);
-  const [title, setTitle] = useState(urlTitle);
+  const cached = songCache.getLast();
+
+  const [artist, setArtist] = useState(() => {
+    if (urlArtist) return urlArtist;
+    if (cached) return cached.data.artist;
+    return "";
+  });
+  const [title, setTitle] = useState(() => {
+    if (urlTitle) return urlTitle;
+    if (cached) return cached.data.title;
+    return "";
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
-  const [song, setSong] = useState<SongPayload | null>(null);
+  const [song, setSong] = useState<SongPayload | null>(() => {
+    if (cached) {
+      const [cacheArtist, cacheTitle] = cached.key.split("|");
+      if (!urlArtist || (urlArtist === cacheArtist && urlTitle === cacheTitle)) {
+        return cached.data;
+      }
+    }
+    return null;
+  });
 
-  const lastKey = useRef<string>("");
+  const lastKey = useRef<string>(cached ? cached.key : "");
 
   const run = useCallback(async (a: string, t: string) => {
     if (!a || !t) return;
     const key = `${a}|${t}`;
-    if (cachedSongData && cachedSongData.key === key) {
-      setSong(cachedSongData.data);
+    const cachedData = songCache.get(key);
+    if (cachedData) {
+      setSong(cachedData);
       setLoading(false);
       setError(null);
       return;
@@ -53,7 +68,7 @@ function SongPageInner() {
     try {
       const s = await getSong(a, t);
       setSong(s);
-      cachedSongData = { key, data: s };
+      songCache.set(key, s);
       saveLastSong({ artist: a, title: t });
     } catch (err) {
       setError(friendlyError(err));
@@ -86,8 +101,10 @@ function SongPageInner() {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!artist || !title) return;
+    lastKey.current = `${artist}|${title}`;
     const q = new URLSearchParams({ artist, title }).toString();
     router.push(`/song?${q}`);
+    run(artist, title);
   }
 
   return (
