@@ -377,15 +377,27 @@ def artist(
     quickly. The browser calls this after it has populated the cache via
     `/api/artist/pool` + `/api/song/by-id`.
     """
+    # Prefer whichever source is richer. A few English artists have a stray
+    # lyrics-backed song or two cached from past live searches; that thin cache
+    # must not shadow a full dataset aggregate (e.g. Drake: 1 cached vs 482).
+    agg = db.get_artist_aggregate(name)
+    if agg:
+        lb = db.get_artist(name)
+        lb_valid = 0
+        if lb:
+            lb_valid = sum(
+                1 for s in db.list_songs(lb) if s.lyrics and s.lyrics.strip()
+            )
+        if agg.song_count > lb_valid:
+            return _dataset_payload(agg)
+
     try:
         return _aggregate_payload(name, n=min, shuffle=shuffle)
     except HTTPException as e:
         # No lyrics-backed catalogue cached — fall back to the precomputed
         # dataset aggregate (instant, no fetches) if we have one.
-        if e.status_code == 404:
-            agg = db.get_artist_aggregate(name)
-            if agg:
-                return _dataset_payload(agg)
+        if e.status_code == 404 and agg:
+            return _dataset_payload(agg)
         raise
     except Exception as e:  # noqa: BLE001
         log.exception("aggregate failed")
