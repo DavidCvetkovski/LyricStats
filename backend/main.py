@@ -23,6 +23,10 @@ from lyricstats.config import SEED_KEY
 log = logging.getLogger("lyricstats.api")
 logging.basicConfig(level=logging.INFO)
 
+# Target floor for live (non-dataset) artists: try to fetch up to this many
+# songs. Below it, the view is flagged `limited` so the UI can say so.
+MIN_VIEW = 20
+
 app = FastAPI(title="LyricStats API", version="0.3.0")
 app.add_middleware(
     CORSMiddleware,
@@ -217,6 +221,10 @@ def _aggregate_payload(name: str, n: int, shuffle: str) -> dict[str, Any]:
         "stats": agg.to_dict(),
         "cached_total": len(valid_songs),
         "sampled": len(sampled_pairs),
+        # A live/lyrics-backed artist with fewer than MIN_VIEW songs is a
+        # partial picture (e.g. niche artists with little on lrclib/ovh).
+        "limited": len(valid_songs) < MIN_VIEW,
+        "source": "cache",
     }
 
 
@@ -256,6 +264,7 @@ def _dataset_payload(agg: db.ArtistAggregate) -> dict[str, Any]:
         "sampled": len(songs) or agg.song_count,
         "has_sections": agg.has_sections,
         "source": "dataset",
+        "limited": False,
     }
 
 
@@ -277,37 +286,12 @@ def artist_pool(
     existing = db.get_artist(name)
     cached_songs = db.list_songs(existing) if existing else []
     cached_valid = [s for s in cached_songs if s.lyrics and s.lyrics.strip()]
-
-    # Ensure target_count is exactly 20 for live-fetched artists so the browser
-    # does 20 API calls to populate the database, rather than trying to fetch
-    # 500 (which is too slow) or skipping entirely.
-    target_count = 20
-    if existing and existing.total_songs is not None:
-        target_count = 20 if 20 < existing.total_songs else existing.total_songs
-
-    # We only skip fetching if:
-    # 1. We have cached at least target_count valid songs (with lyrics)
-    # OR
-    # 2. We have already cached all available songs from Genius
-    has_enough = len(cached_valid) >= target_count or (
-        existing
-        and existing.total_songs is not None
-        and len(cached_songs) >= existing.total_songs
-    )
-
-    if not fresh and has_enough:
-        return {
-            "name": existing.name if existing else name,
-            "genius_url": existing.genius_url if existing else None,
-            "to_fetch": [],
-            "cached_total": len(cached_valid),
-        }
-
-    # Precomputed dataset aggregate: answer instantly, fetch nothing. The
-    # browser sees an empty to_fetch and skips straight to /api/artist, which
-    # returns the whole-career figures from the ArtistAggregate table.
     agg = db.get_artist_aggregate(name)
-    if agg:
+
+    # 1. Prefer the precomputed dataset aggregate when it's richer than whatever
+    #    we have cached — a stray cached song or two must not shadow it. Answers
+    #    instantly with zero fetches.
+    if not fresh and agg and agg.song_count > len(cached_valid):
         return {
             "name": agg.display_name,
             "genius_url": None,
@@ -315,20 +299,42 @@ def artist_pool(
             "cached_total": agg.song_count,
         }
 
-    # Looser typo with no exact key match: offer a 'did you mean?' from the
-    # dataset rather than dropping into a slow live Genius fetch.
-    suggestions = db.suggest_artist_aggregates(name, limit=1)
-    if suggestions:
+    # 2. Lyrics-backed cache already holds a full view (>= MIN_VIEW valid songs),
+    #    OR we've already cached everything Genius has for this artist (a niche
+    #    artist with < MIN_VIEW total): serve it, no fetch. The latter avoids
+    #    re-querying Genius on every view for limited catalogues.
+    exhausted = (
+        existing is not None
+        and existing.total_songs is not None
+        and existing.total_songs >= 1
+        and len(cached_songs) >= existing.total_songs
+    )
+    if not fresh and (len(cached_valid) >= MIN_VIEW or exhausted):
         return {
-            "name": name,
-            "genius_url": None,
+            "name": existing.name if existing else name,
+            "genius_url": existing.genius_url if existing else None,
             "to_fetch": [],
-            "cached_total": 0,
-            "suggestion": suggestions[0].display_name,
+            "cached_total": len(cached_valid),
         }
 
+    # 3. Nothing cached and not in the dataset: a typo may have a close dataset
+    #    match — suggest it instead of a slow live fetch.
+    if not cached_valid and not agg:
+        suggestions = db.suggest_artist_aggregates(name, limit=1)
+        if suggestions:
+            return {
+                "name": name,
+                "genius_url": None,
+                "to_fetch": [],
+                "cached_total": 0,
+                "suggestion": suggestions[0].display_name,
+            }
+
+    # 4. Live fetch toward the MIN_VIEW floor. resolve_and_sample re-queries
+    #    Genius (refreshing total_songs), so a stale low count can't strand us;
+    #    it naturally returns only as many as the artist actually has.
     try:
-        a, sample = fetch.resolve_and_sample(name, target_count, shuffle_seed=shuffle or None)
+        a, sample = fetch.resolve_and_sample(name, MIN_VIEW, shuffle_seed=shuffle or None)
     except fetch.FetchError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001

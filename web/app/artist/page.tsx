@@ -328,6 +328,12 @@ function ArtistView({ data }: { data: ArtistPayload }) {
           {s.song_count} songs · {s.total_words.toLocaleString()} words ·{" "}
           {s.total_unique_words.toLocaleString()} distinct
         </p>
+        {data.limited && (
+          <p className="mt-2 text-[0.72rem] uppercase tracking-[0.18em] text-ink-mute">
+            Limited view — this artist isn’t in our dataset, so only{" "}
+            {s.song_count} {s.song_count === 1 ? "song was" : "songs were"} found
+          </p>
+        )}
         {data.cached_total > data.sampled && (
           <p className="mt-2 text-[0.78rem] italic text-ink-mute">
             a random sample of {data.sampled} drawn from a catalogue of {data.cached_total}

@@ -73,4 +73,7 @@ export type ArtistPayload = {
   // per-song list to infer it from.
   has_sections?: boolean;
   source?: "dataset" | "cache" | "genius";
+  // True when this artist isn't in the preloaded dataset and we could only
+  // gather a partial catalogue (fewer than the ~20-song floor).
+  limited?: boolean;
 };
