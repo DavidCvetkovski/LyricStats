@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   getArtistPool,
   fetchSongById,
@@ -249,7 +250,50 @@ function ArtistPageInner() {
 
 function ArtistView({ data }: { data: ArtistPayload }) {
   const s = data.stats;
-  const topSongs = [...data.songs].sort((a, b) => b.word_count - a.word_count);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortField, setSortField] = useState<"title" | "words" | "unique" | "variety">("words");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  const handleSort = (field: "title" | "words" | "unique" | "variety") => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortOrder(field === "title" ? "asc" : "desc");
+    }
+  };
+
+  const topSongs = [...data.songs]
+    .filter((song) => {
+      const q = searchQuery.toLowerCase().trim();
+      if (!q) return true;
+      const titleMatch = song.title.toLowerCase().includes(q);
+      const albumMatch = song.album ? song.album.toLowerCase().includes(q) : false;
+      return titleMatch || albumMatch;
+    })
+    .sort((a, b) => {
+      let valA: any = "";
+      let valB: any = "";
+      if (sortField === "title") {
+        valA = a.title.toLowerCase();
+        valB = b.title.toLowerCase();
+      } else if (sortField === "words") {
+        valA = a.word_count;
+        valB = b.word_count;
+      } else if (sortField === "unique") {
+        valA = a.unique_words;
+        valB = b.unique_words;
+      } else if (sortField === "variety") {
+        valA = a.type_token_ratio;
+        valB = b.type_token_ratio;
+      }
+
+      if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+      if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+
   // Only show structure-derived figures when at least one sampled song has
   // real section tags ([Chorus] etc.) — plain lrclib/ovh lyrics don't carry them.
   const hasSections = data.songs.some((song) => song.has_sections);
@@ -270,7 +314,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
         </p>
         {data.cached_total > data.sampled && (
           <p className="mt-2 text-[0.78rem] italic text-ink-mute">
-            a random sample of {data.sampled} drawn from {data.cached_total} on file
+            a random sample of {data.sampled} drawn from a catalogue of {data.cached_total}
           </p>
         )}
         {data.genius_url && (
@@ -281,7 +325,18 @@ function ArtistView({ data }: { data: ArtistPayload }) {
               rel="noopener noreferrer"
               className="hover:text-accent transition-colors underline decoration-rule-strong underline-offset-4 hover:decoration-accent"
             >
-              wrong artist? · view on Genius ↗
+              wrong artist? · view on Genius{" "}
+              <svg
+                className="inline-block w-2.5 h-2.5 ml-0.5 align-baseline"
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3.5 2.5h6v6M9.5 2.5l-7 7" />
+              </svg>
             </a>
           </p>
         )}
@@ -347,14 +402,108 @@ function ArtistView({ data }: { data: ArtistPayload }) {
       </section>
 
       <section className="mt-16 sm:mt-20">
-        <h3
-          className="display mb-5 sm:mb-6"
-          style={{ fontSize: "clamp(1.75rem, 6vw, 2.5rem)" }}
-        >
-          The Catalogue
-        </h3>
+        <div className="flex flex-col md:flex-row md:items-baseline justify-between gap-6 mb-6">
+          <h3
+            className="display"
+            style={{ fontSize: "clamp(1.75rem, 6vw, 2.5rem)" }}
+          >
+            The Catalogue
+          </h3>
+          
+          <div className="flex gap-4 items-center w-full sm:w-auto">
+            {/* Search Box */}
+            <input
+              type="text"
+              placeholder="Search title or album..."
+              className="field text-sm py-1.5 px-1 max-w-xs flex-1 sm:flex-initial"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            
+            {/* Mobile-only Sort Dropdown */}
+            <div className="sm:hidden">
+              <select
+                value={`${sortField}-${sortOrder}`}
+                onChange={(e) => {
+                  const [field, order] = e.target.value.split("-") as [any, any];
+                  setSortField(field);
+                  setSortOrder(order);
+                }}
+                className="cursor-pointer bg-transparent border-0 border-b border-rule-strong py-1.5 px-1 text-xs smallcaps text-ink font-serif italic outline-none focus:border-accent"
+              >
+                <option value="words-desc" className="bg-paper text-ink">Words (high to low)</option>
+                <option value="words-asc" className="bg-paper text-ink">Words (low to high)</option>
+                <option value="unique-desc" className="bg-paper text-ink">Unique (high to low)</option>
+                <option value="unique-asc" className="bg-paper text-ink">Unique (low to high)</option>
+                <option value="variety-desc" className="bg-paper text-ink">Variety (high to low)</option>
+                <option value="variety-asc" className="bg-paper text-ink">Variety (low to high)</option>
+                <option value="title-asc" className="bg-paper text-ink">Title (A-Z)</option>
+                <option value="title-desc" className="bg-paper text-ink">Title (Z-A)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
         <div className="border-t border-rule-strong">
-          {topSongs.map((song, i) => (
+          {/* Desktop Table Header */}
+          <div className="hidden sm:grid sm:grid-cols-[2.5rem_1fr_auto_auto_auto] gap-x-4 items-baseline border-b border-rule-strong pb-2 pt-4 text-xs smallcaps text-ink-mute mb-2">
+            <span className="figure text-left select-none">#</span>
+            <button
+              type="button"
+              onClick={() => handleSort("title")}
+              className={`text-left cursor-pointer hover:text-ink transition-colors ${
+                sortField === "title" ? "text-accent font-semibold" : ""
+              }`}
+            >
+              Title{" "}
+              <span className={sortField === "title" ? "opacity-100" : "opacity-0 select-none"}>
+                {sortField === "title" && sortOrder === "desc" ? "↓" : "↑"}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSort("words")}
+              className={`text-right cursor-pointer hover:text-ink transition-colors min-w-[3.5rem] ${
+                sortField === "words" ? "text-accent font-semibold" : ""
+              }`}
+            >
+              Words{" "}
+              <span className={sortField === "words" ? "opacity-100" : "opacity-0 select-none"}>
+                {sortField === "words" && sortOrder === "asc" ? "↑" : "↓"}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSort("unique")}
+              className={`text-right cursor-pointer hover:text-ink transition-colors min-w-[3.5rem] ${
+                sortField === "unique" ? "text-accent font-semibold" : ""
+              }`}
+            >
+              Unique{" "}
+              <span className={sortField === "unique" ? "opacity-100" : "opacity-0 select-none"}>
+                {sortField === "unique" && sortOrder === "asc" ? "↑" : "↓"}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSort("variety")}
+              className={`text-right cursor-pointer hover:text-ink transition-colors min-w-[3.5rem] ${
+                sortField === "variety" ? "text-accent font-semibold" : ""
+              }`}
+            >
+              Variety{" "}
+              <span className={sortField === "variety" ? "opacity-100" : "opacity-0 select-none"}>
+                {sortField === "variety" && sortOrder === "asc" ? "↑" : "↓"}
+              </span>
+            </button>
+          </div>
+
+          {topSongs.length === 0 ? (
+            <p className="font-serif italic text-ink-soft text-lg py-8 text-center">
+              No matching songs in catalogue.
+            </p>
+          ) : (
+            topSongs.map((song, i) => (
             <div
               key={song.title}
               className="grid grid-cols-[2rem_1fr] sm:grid-cols-[2.5rem_1fr_auto_auto_auto] gap-x-3 sm:gap-x-4 gap-y-2 items-baseline border-b border-rule py-3"
@@ -363,9 +512,12 @@ function ArtistView({ data }: { data: ArtistPayload }) {
                 {String(i + 1).padStart(2, "0")}
               </span>
               <div className="min-w-0">
-                <p className="font-serif text-lg sm:text-xl text-ink leading-tight break-words">
+                <Link
+                  href={`/song?artist=${encodeURIComponent(data.name)}&title=${encodeURIComponent(song.title)}`}
+                  className="font-serif text-lg sm:text-xl text-ink hover:text-accent transition-colors leading-tight break-words hover:underline decoration-rule underline-offset-4 hover:decoration-accent"
+                >
                   {song.title}
-                </p>
+                </Link>
                 {song.album && (
                   <p className="text-[0.72rem] sm:text-[0.78rem] italic text-ink-mute mt-0.5 break-words">
                     {song.album}
@@ -384,7 +536,8 @@ function ArtistView({ data }: { data: ArtistPayload }) {
                 />
               </div>
             </div>
-          ))}
+          )))
+        }
         </div>
       </section>
     </article>
