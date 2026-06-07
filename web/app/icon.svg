@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,900&amp;display=swap');
+      .bg {
+        fill: #f6f1e8;
+      }
+      .border {
+        fill: none;
+        stroke: #1a1614;
+        stroke-width: 12;
+        opacity: 0.08;
+      }
+      .text-L {
+        font-family: 'Fraunces', Georgia, serif;
+        font-weight: 900;
+        font-style: italic;
+        fill: #1a1614;
+        font-size: 340px;
+        text-anchor: middle;
+      }
+      .text-S {
+        font-family: 'Fraunces', Georgia, serif;
+        font-weight: 900;
+        font-style: italic;
+        fill: #7a1f2b;
+        font-size: 340px;
+        text-anchor: middle;
+      }
+    </style>
+  </defs>
+  <!-- Squircle container -->
+  <rect width="512" height="512" rx="112" class="bg" />
+  <rect x="6" y="6" width="500" height="500" rx="106" class="border" />
+  
+  <!-- Monogram LS -->
+  <text x="200" y="340" class="text-L">L</text>
+  <text x="320" y="410" class="text-S">S</text>
+</svg>
