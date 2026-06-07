@@ -278,11 +278,25 @@ def artist_pool(
     cached_songs = db.list_songs(existing) if existing else []
     cached_valid = [s for s in cached_songs if s.lyrics and s.lyrics.strip()]
 
-    target_count = min
+    # Ensure target_count is at least 20 for live-fetched artists so we don't
+    # show a tiny catalogue (e.g. 1 song) if a previous search cached a single song.
+    target_count = max(min, 20)
     if existing and existing.total_songs is not None:
-        target_count = min if min < existing.total_songs else existing.total_songs
+        # Cap at total_songs, but ensure cap_limit is at least 20 if possible
+        cap_limit = max(20, existing.total_songs)
+        target_count = min if min < cap_limit else cap_limit
 
-    if not fresh and len(cached_songs) >= target_count:
+    # We only skip fetching if:
+    # 1. We have cached at least target_count valid songs (with lyrics)
+    # OR
+    # 2. We have already cached all available songs from Genius
+    has_enough = len(cached_valid) >= target_count or (
+        existing
+        and existing.total_songs is not None
+        and len(cached_songs) >= existing.total_songs
+    )
+
+    if not fresh and has_enough:
         return {
             "name": existing.name if existing else name,
             "genius_url": existing.genius_url if existing else None,

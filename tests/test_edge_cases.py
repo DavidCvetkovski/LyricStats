@@ -205,3 +205,86 @@ def test_pick_n_when_population_equals_n_still_shuffles():
     assert sorted(s.id for s in a) == [0, 1, 2, 3, 4]
     # Different seed → different order with high probability
     assert [s.id for s in a] != [s.id for s in b] or len(set([0, 1, 2, 3, 4])) == 1
+
+
+# ─── backend artist pool edge cases ──────────────────────────────────────────
+
+
+def test_artist_pool_target_count_at_least_20():
+    from unittest.mock import patch, MagicMock
+    from backend.main import artist_pool
+    from lyricstats import db
+
+    # 1. Test case: Artist not in dataset, cached_songs < 20, total_songs is set to 6 (Karolina case).
+    # Since total_songs is 6, cap_limit is max(20, 6) = 20.
+    # len(cached_songs) is 6, but target_count is 20. We have already cached all 6 available songs,
+    # so we should skip and return empty to_fetch.
+    fake_artist = MagicMock(spec=db.Artist)
+    fake_artist.name = "karolina gocheva"
+    fake_artist.genius_url = "https://genius.com/karolina"
+    fake_artist.total_songs = 6
+
+    fake_cached_songs = [
+        MagicMock(id=1, title="Song 1", lyrics="hello world", genius_id=1),
+        MagicMock(id=2, title="Song 2", lyrics="", genius_id=2),
+        MagicMock(id=3, title="Song 3", lyrics="", genius_id=3),
+        MagicMock(id=4, title="Song 4", lyrics="", genius_id=4),
+        MagicMock(id=5, title="Song 5", lyrics="", genius_id=5),
+        MagicMock(id=6, title="Song 6", lyrics="", genius_id=6),
+    ]
+
+    with patch("lyricstats.db.get_artist", return_value=fake_artist), \
+         patch("lyricstats.db.list_songs", return_value=fake_cached_songs), \
+         patch("lyricstats.db.get_artist_aggregate", return_value=None), \
+         patch("lyricstats.db.suggest_artist_aggregates", return_value=[]):
+        
+        res = artist_pool(name="karolina gocheva", min=500, shuffle="", fresh=False)
+        assert res["to_fetch"] == []
+        assert res["cached_total"] == 1
+
+
+def test_artist_pool_target_count_not_enough_fetched():
+    from unittest.mock import patch, MagicMock
+    from backend.main import artist_pool
+    from lyricstats import db
+
+    # 2. Test case: Artist with 100 total_songs, cached 6, only 1 valid.
+    # Since total_songs is 100, target_count is min(500, max(20, 100)) = 100.
+    # len(cached_songs) is 6, which is < target_count (100) and < total_songs (100).
+    # so it should NOT skip, and should call resolve_and_sample.
+    fake_artist = MagicMock(spec=db.Artist)
+    fake_artist.name = "test artist"
+    fake_artist.genius_url = "https://genius.com/test"
+    fake_artist.total_songs = 100
+
+    fake_cached_songs = [
+        MagicMock(id=1, title="Song 1", lyrics="hello", genius_id=1),
+        MagicMock(id=2, title="Song 2", lyrics="", genius_id=2),
+        MagicMock(id=3, title="Song 3", lyrics="", genius_id=3),
+        MagicMock(id=4, title="Song 4", lyrics="", genius_id=4),
+        MagicMock(id=5, title="Song 5", lyrics="", genius_id=5),
+        MagicMock(id=6, title="Song 6", lyrics="", genius_id=6),
+    ]
+
+    sampled_songs = [
+        {"id": 1, "title": "Song 1"},
+        {"id": 2, "title": "Song 2"},
+        {"id": 3, "title": "Song 3"},
+        {"id": 4, "title": "Song 4"},
+        {"id": 5, "title": "Song 5"},
+        {"id": 6, "title": "Song 6"},
+        {"id": 7, "title": "Song 7"},
+        {"id": 8, "title": "Song 8"},
+    ]
+
+    with patch("lyricstats.db.get_artist", return_value=fake_artist), \
+         patch("lyricstats.db.list_songs", return_value=fake_cached_songs), \
+         patch("lyricstats.db.get_artist_aggregate", return_value=None), \
+         patch("lyricstats.db.suggest_artist_aggregates", return_value=[]), \
+         patch("lyricstats.fetch.resolve_and_sample", return_value=(fake_artist, sampled_songs)):
+        
+        res = artist_pool(name="test artist", min=500, shuffle="", fresh=False)
+        assert res["to_fetch"] == [
+            {"id": 7, "title": "Song 7"},
+            {"id": 8, "title": "Song 8"},
+        ]
