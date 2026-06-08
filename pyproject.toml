@@ -4,23 +4,26 @@ version = "0.1.0"
 description = "Stats for lyrics, per song and per artist."
 requires-python = ">=3.11"
 dependencies = [
-    "streamlit>=1.36",
     "lyricsgenius>=3.0.1",
     "sqlmodel>=0.0.22",
     "python-dotenv>=1.0",
-    "langdetect>=1.0.9",
-    "pandas>=2.2",
-    "altair>=5.3",
+    "pandas>=2.2",          # build-time: scripts/import_dataset.py streams the dataset CSV
     "requests>=2.32",
     "tenacity>=8.2",
     "fastapi>=0.115",
-    "uvicorn[standard]>=0.32",
+    "uvicorn[standard]>=0.32",  # local ASGI server (uvicorn backend.main:app)
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "ruff>=0.5",
+]
+# Build-time only: training the non-song title classifier during dataset import.
+# Never installed on Vercel (the app reads precomputed aggregates).
+import-ml = [
+    "fasttext-wheel>=0.9.2",
+    "numpy>=1.26,<2",  # fasttext-wheel 0.9.2 predict() uses np.array(copy=False), removed in numpy 2
 ]
 
 [tool.ruff]

@@ -11,6 +11,7 @@ import { loadLastSong, saveLastSong } from "@/lib/lastSearch";
 import { friendlyError, type FriendlyError } from "@/lib/errors";
 import { ErrorNote } from "@/components/ErrorNote";
 import { songCache } from "@/lib/cache";
+import { titleCase } from "@/lib/utils";
 
 export default function SongPage() {
   return (
@@ -313,6 +314,3 @@ function Inline({ label, value }: { label: string; value: string }) {
   );
 }
 
-function titleCase(s: string): string {
-  return s.replace(/\w\S*/g, (t) => t[0].toUpperCase() + t.slice(1).toLowerCase());
-}

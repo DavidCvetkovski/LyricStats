@@ -18,6 +18,7 @@ import { loadLastArtist, saveLastArtist } from "@/lib/lastSearch";
 import { friendlyError, type FriendlyError } from "@/lib/errors";
 import { ErrorNote } from "@/components/ErrorNote";
 import { artistCache } from "@/lib/cache";
+import { titleCase } from "@/lib/utils";
 
 export default function ArtistPage() {
   return (
@@ -277,33 +278,29 @@ function ArtistView({ data }: { data: ArtistPayload }) {
     }
   };
 
+  function sortValue(song: (typeof data.songs)[0]): string | number {
+    switch (sortField) {
+      case "title":    return song.title.toLowerCase();
+      case "words":    return song.word_count;
+      case "unique":   return song.unique_words;
+      case "variety":  return song.type_token_ratio;
+    }
+  }
+
   const topSongs = [...data.songs]
     .filter((song) => {
       const q = searchQuery.toLowerCase().trim();
       if (!q) return true;
-      const titleMatch = song.title.toLowerCase().includes(q);
-      const albumMatch = song.album ? song.album.toLowerCase().includes(q) : false;
-      return titleMatch || albumMatch;
+      return (
+        song.title.toLowerCase().includes(q) ||
+        (song.album?.toLowerCase().includes(q) ?? false)
+      );
     })
     .sort((a, b) => {
-      let valA: any = "";
-      let valB: any = "";
-      if (sortField === "title") {
-        valA = a.title.toLowerCase();
-        valB = b.title.toLowerCase();
-      } else if (sortField === "words") {
-        valA = a.word_count;
-        valB = b.word_count;
-      } else if (sortField === "unique") {
-        valA = a.unique_words;
-        valB = b.unique_words;
-      } else if (sortField === "variety") {
-        valA = a.type_token_ratio;
-        valB = b.type_token_ratio;
-      }
-
-      if (valA < valB) return sortOrder === "asc" ? -1 : 1;
-      if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+      const va = sortValue(a);
+      const vb = sortValue(b);
+      if (va < vb) return sortOrder === "asc" ? -1 : 1;
+      if (va > vb) return sortOrder === "asc" ? 1 : -1;
       return 0;
     });
 
@@ -597,6 +594,3 @@ function Mini({ label, value }: { label: string; value: string }) {
   );
 }
 
-function titleCase(s: string): string {
-  return s.replace(/\w\S*/g, (t) => t[0].toUpperCase() + t.slice(1).toLowerCase());
-}

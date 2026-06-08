@@ -9,12 +9,17 @@ from __future__ import annotations
 
 import json
 import unicodedata
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 from .config import DATABASE_URL, DB_PATH
+
+
+def _utcnow() -> datetime:
+    """Timezone-aware UTC now (datetime.utcnow() is deprecated in 3.12+)."""
+    return datetime.now(timezone.utc)
 
 
 def normalize_key(name: str) -> str:
@@ -50,7 +55,7 @@ class Song(SQLModel, table=True):
     genius_id: Optional[int] = Field(default=None, index=True)
     lyrics: str = ""
     stats_json: Optional[str] = None  # cached computed stats
-    fetched_at: datetime = Field(default_factory=datetime.utcnow)
+    fetched_at: datetime = Field(default_factory=_utcnow)
 
 
 class ArtistAggregate(SQLModel, table=True):
@@ -76,7 +81,7 @@ class ArtistAggregate(SQLModel, table=True):
     # No lyrics — song pages still fetch those live.
     songs_json: str = ""
     source: str = Field(default="dataset")
-    built_at: datetime = Field(default_factory=datetime.utcnow)
+    built_at: datetime = Field(default_factory=_utcnow)
 
 
 def _make_engine():
@@ -190,7 +195,7 @@ def upsert_song(
             existing.album = album or existing.album
             existing.year = year or existing.year
             existing.genius_id = genius_id or existing.genius_id
-            existing.fetched_at = datetime.utcnow()
+            existing.fetched_at = _utcnow()
             existing.stats_json = None  # invalidate cache
             s.add(existing)
             s.commit()
@@ -249,7 +254,7 @@ def mark_catalogue_fetched(artist: Artist) -> None:
         row = s.get(Artist, artist.id)
         if not row:
             return
-        row.catalogue_fetched_at = datetime.utcnow()
+        row.catalogue_fetched_at = _utcnow()
         s.add(row)
         s.commit()
 
@@ -337,7 +342,7 @@ def upsert_artist_aggregate(
             existing.has_sections = has_sections
             existing.stats_json = payload
             existing.source = source
-            existing.built_at = datetime.utcnow()
+            existing.built_at = _utcnow()
             s.add(existing)
         else:
             s.add(

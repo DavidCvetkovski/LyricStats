@@ -1,4 +1,4 @@
-"""Configuration — reads env vars / Streamlit secrets."""
+"""Configuration — reads from environment variables and .env files."""
 
 from __future__ import annotations
 
@@ -10,20 +10,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def _from_streamlit_secrets(key: str) -> str | None:
-    """Read from st.secrets if Streamlit is running, else None."""
-    try:
-        import streamlit as st  # noqa: PLC0415
-
-        if key in st.secrets:
-            return str(st.secrets[key])
-    except Exception:
-        pass
-    return None
-
-
 def get(key: str, default: str | None = None) -> str | None:
-    return os.getenv(key) or _from_streamlit_secrets(key) or default
+    return os.getenv(key) or default
 
 
 GENIUS_TOKEN: str | None = get("GENIUS_TOKEN")

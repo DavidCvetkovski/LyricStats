@@ -35,11 +35,13 @@ import pandas as pd
 import requests
 
 # Allow "uv run python scripts/import_dataset.py" without installing the package.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # for title_filter
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from lyricstats import db  # noqa: E402
 from lyricstats.stats import STOPWORDS  # noqa: E402
 from lyricstats.text import parse_sections, tokenize  # noqa: E402
+from title_filter import _SONG_GUARD_RE, load_classifier  # noqa: E402
 
 DATASET_URL = (
     "https://huggingface.co/datasets/sebastiandizon/genius-song-lyrics"
@@ -76,6 +78,11 @@ _NON_SONG_SUBSTR = (
     "manifesto", "open letter", "statement", "essay", "poem",
     "vmas", "vma performance", "bet awards", "grammy", "oscars", "super bowl",
     "halftime", "medley", "documentary", "trailer", "announcement",
+    # long-form prose / transcripts with bespoke titles the classifier can't
+    # learn (specific multi-word phrases → no real-song collateral; the
+    # song-type guard still spares "… Interlude"/"… Skit" variants):
+    "phone conversation", "phone call with", "philosophy book",
+    "the future of music",
 )
 
 # …and by length: real songs are short. Anything past this is almost always a
@@ -83,11 +90,22 @@ _NON_SONG_SUBSTR = (
 MAX_SONG_WORDS = 2000
 
 
-def is_non_song(title: str, word_count: int = 0) -> bool:
+def is_non_song(title: str, word_count: int = 0, *, clf=None) -> bool:
+    """Three layers, in order of cost: a real-song-type guard, a deterministic
+    blocklist (substrings + length cap), then the optional fastText title
+    classifier. ``clf`` may be None (no model present) — the blocklist still
+    runs, so the fold degrades gracefully without fasttext."""
+    t = (title or "").lower()
+    # Never drop a freestyle / interlude / skit, whatever else the title says.
+    if _SONG_GUARD_RE.search(t):
+        return False
     if word_count and word_count > MAX_SONG_WORDS:
         return True
-    t = (title or "").lower()
-    return any(p in t for p in _NON_SONG_SUBSTR)
+    if any(p in t for p in _NON_SONG_SUBSTR):
+        return True
+    if clf is not None and clf.is_junk(title):
+        return True
+    return False
 
 
 def is_junk_artist(name: str) -> bool:
@@ -259,14 +277,15 @@ def _highlights(songs: list[tuple[str, int, float]]) -> dict:
     }
 
 
-def _build_aggregate(rows: list, *, min_songs: int, top_n: int):
+def _build_aggregate(rows: list, *, min_songs: int, top_n: int, clf=None):
     """Build an ArtistAggregate ORM object for one artist group, or None if too
     few songs. Rows are grouped by normalised (trim+lower) name, so casing
     variants ('Johnnyswim' / 'JOHNNYSWIM') merge into one artist; the display
     name is the most common raw spelling. No DB write here — caller batches."""
-    # Drop non-songs (by title) and over-long pages (scripts/interviews) before
-    # anything counts toward stats, highlights, or the catalogue.
-    rows = [r for r in rows if not is_non_song(r["title"], r["wc"])]
+    # Drop non-songs (interviews, liner notes, tour merch, translations, …) via
+    # blocklist + length cap + the fastText title classifier, before anything
+    # counts toward stats, highlights, or the catalogue.
+    rows = [r for r in rows if not is_non_song(r["title"], r["wc"], clf=clf)]
     n = len(rows)
     if n < min_songs:
         return None
@@ -313,6 +332,9 @@ def _build_aggregate(rows: list, *, min_songs: int, top_n: int):
 
 def fold_to_aggregates(tmp_path: str, *, min_songs: int, top_n: int,
                        batch: int = 2000) -> int:
+    clf = load_classifier()
+    print(f"  title classifier: {'loaded' if clf else 'absent → blocklist only'}",
+          flush=True)
     print("  resetting ArtistAggregate table…", flush=True)
     db.reset_aggregates()
 
@@ -343,7 +365,7 @@ def fold_to_aggregates(tmp_path: str, *, min_songs: int, top_n: int,
     def finish_artist(songs: list):
         nonlocal written, seen_artists
         seen_artists += 1
-        agg = _build_aggregate(songs, min_songs=min_songs, top_n=top_n)
+        agg = _build_aggregate(songs, min_songs=min_songs, top_n=top_n, clf=clf)
         if agg is not None:
             buf.append(agg)
             written += 1

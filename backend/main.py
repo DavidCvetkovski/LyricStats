@@ -235,7 +235,7 @@ def _dataset_payload(agg: db.ArtistAggregate) -> dict[str, Any]:
     lyrics — song pages fetch those live), served instantly with zero lyric
     fetches. `has_sections` is at the payload level so chorus-share still gates.
     """
-    stats = db.load_aggregate_stats(agg) or {}
+    agg_stats = db.load_aggregate_stats(agg) or {}
     songs: list[dict[str, Any]] = []
     if agg.songs_json:
         try:
@@ -259,7 +259,7 @@ def _dataset_payload(agg: db.ArtistAggregate) -> dict[str, Any]:
         "name": agg.display_name,
         "genius_url": None,
         "songs": songs,
-        "stats": stats,
+        "stats": agg_stats,
         "cached_total": agg.song_count,
         "sampled": len(songs) or agg.song_count,
         "has_sections": agg.has_sections,
