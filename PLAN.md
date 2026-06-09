@@ -10,7 +10,7 @@ A web app that fetches lyrics for any song or artist (must support Jala Brat & B
 - **Backend / app:** Python — by far the strongest NLP ecosystem (`nltk`, `spaCy`, `textstat`, `pronouncing`, `langdetect`, `transformers`), and most of the work is text processing.
 - **Web framework:** **Streamlit** for v1. It is the fastest path to a working "data app" — charts, tables, inputs in ~50 lines. We can graduate to **FastAPI + React (Vite)** later if we outgrow it.
 - **Storage:** SQLite via `sqlmodel`. Caches fetched lyrics + computed stats so we never re-scrape.
-- **Deploy:** Streamlit Community Cloud (free) for v1, fly.io / Railway later.
+- **Deploy:** Streamlit Community Cloud (free) for v1, Railway later.
 
 ### 1.2 Lyrics source
 - **Primary: Genius**, via `lyricsgenius` (Python wrapper). It uses the official Genius API for search/metadata and scrapes the lyric block from the song page. It is free (requires a free Genius API token) and is the only realistic free source that reliably has Balkan artists like **Jala Brat** and **Buba Corelli**.

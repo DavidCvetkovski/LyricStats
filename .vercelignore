@@ -10,7 +10,6 @@ streamlit_app.py
 .github/
 Dockerfile
 .dockerignore
-fly.toml
 # Hide the uv/pyproject metadata so Vercel's Python builder installs the slim
 # requirements.txt (with psycopg) instead of the full local dependency set.
 pyproject.toml
