@@ -19,6 +19,7 @@ import { friendlyError, type FriendlyError } from "@/lib/errors";
 import { ErrorNote } from "@/components/ErrorNote";
 import { artistCache } from "@/lib/cache";
 import { titleCase } from "@/lib/utils";
+import { ArtistAutocomplete } from "@/components/ArtistAutocomplete";
 
 export default function ArtistPage() {
   return (
@@ -151,21 +152,28 @@ function ArtistPageInner() {
     }
   }, [urlName, urlMin, urlShuffle, run]);
 
+  const examine = useCallback(
+    (n: string) => {
+      if (!n) return;
+      // Fresh shuffle token on every search → new random sample.
+      const shuffle = Math.random().toString(36).slice(2, 10);
+      // Mark this key as handled so the URL change below doesn't double-run,
+      // then kick the search off directly (don't depend on param reactivity).
+      lastKey.current = `${n}|${min}|${shuffle}`;
+      const q = new URLSearchParams({
+        name: n,
+        min: String(min),
+        shuffle,
+      }).toString();
+      router.push(`/artist?${q}`);
+      run(n, min, shuffle);
+    },
+    [min, router, run],
+  );
+
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name) return;
-    // Fresh shuffle token on every Examine click → new random sample.
-    const shuffle = Math.random().toString(36).slice(2, 10);
-    // Mark this key as handled so the URL change below doesn't double-run,
-    // then kick the search off directly (don't depend on param reactivity).
-    lastKey.current = `${name}|${min}|${shuffle}`;
-    const q = new URLSearchParams({
-      name,
-      min: String(min),
-      shuffle,
-    }).toString();
-    router.push(`/artist?${q}`);
-    run(name, min, shuffle);
+    examine(name);
   }
 
   return (
@@ -189,12 +197,14 @@ function ArtistPageInner() {
       >
         <label className="block">
           <span className="smallcaps mb-1 block">The Artist</span>
-          <input
-            className="field"
-            type="text"
-            placeholder="Buba Corelli"
+          <ArtistAutocomplete
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={setName}
+            onPick={(picked) => {
+              setName(picked);
+              examine(picked);
+            }}
+            placeholder="Buba Corelli"
             autoFocus
           />
         </label>

@@ -135,6 +135,15 @@ def session() -> Session:
     return Session(_engine)
 
 
+# Read-only endpoints (autocomplete, lookups) don't need a transaction. Running
+# them in AUTOCOMMIT skips the per-call BEGIN/COMMIT round-trips, which roughly
+# halves query latency against a remote Postgres (Neon). The execution_options
+# copy is a cheap wrapper that shares the engine's connection pool (and
+# pool_pre_ping); reading `_engine` here keeps tests' monkeypatched engine live.
+def read_session() -> Session:
+    return Session(_engine.execution_options(isolation_level="AUTOCOMMIT"))
+
+
 # ---- artist helpers --------------------------------------------------------
 
 
@@ -275,6 +284,35 @@ def get_artist_aggregate(name: str) -> "ArtistAggregate | None":
             .where(ArtistAggregate.name_key == key)
             .order_by(ArtistAggregate.song_count.desc())  # type: ignore[attr-defined]
         ).first()
+
+
+def search_artist_aggregates(q: str, limit: int = 8) -> list["ArtistAggregate"]:
+    """Typeahead search over dataset artists for the search-box autocomplete.
+
+    Prefix matches on the aggressive key rank first (the obvious intent while
+    someone is typing a name), then substring matches fill any remaining slots.
+    Within each group the larger catalogue wins, so the better-known artist
+    surfaces. Works on both Postgres and SQLite via plain LIKE — name_key is
+    already lowercased alphanumerics, so the query key (normalised the same way)
+    compares cleanly.
+    """
+    key = normalize_key(q)
+    if len(key) < 2:
+        return []
+    from sqlalchemy import case  # noqa: PLC0415
+
+    # One query, one round-trip: match any name containing the key, but order
+    # prefix matches ahead of mid-word ones, then by catalogue size. (The
+    # boolean CASE sorts 0 before 1, i.e. prefix hits first.)
+    prefix_rank = case((ArtistAggregate.name_key.like(f"{key}%"), 0), else_=1)
+    with read_session() as s:
+        rows = s.exec(
+            select(ArtistAggregate)
+            .where(ArtistAggregate.name_key.like(f"%{key}%"))  # type: ignore[attr-defined]
+            .order_by(prefix_rank, ArtistAggregate.song_count.desc())  # type: ignore[attr-defined]
+            .limit(limit)
+        ).all()
+    return list(rows)
 
 
 def suggest_artist_aggregates(name: str, limit: int = 1) -> list["ArtistAggregate"]:

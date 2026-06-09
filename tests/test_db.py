@@ -95,6 +95,48 @@ def test_suggest_ignores_too_short(temp_db):
     assert db.suggest_artist_aggregates("dr") == []
 
 
+# ── typeahead search (autocomplete) ──────────────────────────────────────────
+
+
+def test_search_prefix_ranks_by_song_count(temp_db):
+    db.upsert_artist_aggregate(name="Taylor Swift", display_name="Taylor Swift",
+                               song_count=477, has_sections=True, stats={})
+    db.upsert_artist_aggregate(name="Taylor Dayne", display_name="Taylor Dayne",
+                               song_count=86, has_sections=False, stats={})
+    out = db.search_artist_aggregates("tayl")
+    assert [a.display_name for a in out] == ["Taylor Swift", "Taylor Dayne"]
+
+
+def test_search_prefix_matches_before_substring(temp_db):
+    # "kanye" is a prefix of Kanye West but only a substring of the collab.
+    db.upsert_artist_aggregate(name="Kanye West", display_name="Kanye West",
+                               song_count=843, has_sections=True, stats={})
+    db.upsert_artist_aggregate(name="JAY-Z & Kanye West",
+                               display_name="JAY-Z & Kanye West",
+                               song_count=20, has_sections=True, stats={})
+    out = db.search_artist_aggregates("kanye")
+    assert [a.display_name for a in out] == ["Kanye West", "JAY-Z & Kanye West"]
+
+
+def test_search_ignores_punctuation_and_case(temp_db):
+    db.upsert_artist_aggregate(name="JAY-Z", display_name="JAY-Z",
+                               song_count=400, has_sections=False, stats={})
+    assert [a.display_name for a in db.search_artist_aggregates("jay z")] == ["JAY-Z"]
+
+
+def test_search_respects_limit(temp_db):
+    for i in range(5):
+        db.upsert_artist_aggregate(name=f"Dra {i}", display_name=f"Dra {i}",
+                                   song_count=i, has_sections=False, stats={})
+    assert len(db.search_artist_aggregates("dra", limit=2)) == 2
+
+
+def test_search_ignores_too_short(temp_db):
+    db.upsert_artist_aggregate(name="Drake", display_name="Drake",
+                               song_count=100, has_sections=True, stats={})
+    assert db.search_artist_aggregates("d") == []
+
+
 # ── artist / song CRUD ───────────────────────────────────────────────────────
 
 

@@ -12,6 +12,7 @@ import { friendlyError, type FriendlyError } from "@/lib/errors";
 import { ErrorNote } from "@/components/ErrorNote";
 import { songCache } from "@/lib/cache";
 import { titleCase } from "@/lib/utils";
+import { ArtistAutocomplete } from "@/components/ArtistAutocomplete";
 
 export default function SongPage() {
   return (
@@ -127,12 +128,10 @@ function SongPageInner() {
       <form onSubmit={onSubmit} className="mt-8 sm:mt-10 grid gap-6 sm:gap-8 sm:grid-cols-2">
         <label className="block">
           <span className="smallcaps mb-1 block">The Artist</span>
-          <input
-            className="field"
-            type="text"
-            placeholder="Jala Brat"
+          <ArtistAutocomplete
             value={artist}
-            onChange={(e) => setArtist(e.target.value)}
+            onChange={setArtist}
+            placeholder="Jala Brat"
             autoFocus
           />
         </label>

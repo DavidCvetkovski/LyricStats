@@ -25,6 +25,23 @@ export function getSong(
   return get<SongPayload>(`/api/song?${q.toString()}`);
 }
 
+// ── artist typeahead ───────────────────────────────────────────────────────
+
+export type ArtistSuggestion = { name: string; song_count: number };
+
+/** Autocomplete suggestions from the precomputed dataset (instant, no fetch). */
+export function suggestArtists(
+  q: string,
+  limit = 8,
+  signal?: AbortSignal,
+): Promise<ArtistSuggestion[]> {
+  const query = new URLSearchParams({ q, limit: String(limit) });
+  return get<{ suggestions: ArtistSuggestion[] }>(
+    `/api/artist/suggest?${query.toString()}`,
+    { signal },
+  ).then((r) => r.suggestions);
+}
+
 // ── artist (client-orchestrated fetch) ─────────────────────────────────────
 //
 // A catalogue fetch is three steps the browser drives itself, so each request

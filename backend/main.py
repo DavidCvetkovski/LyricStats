@@ -268,6 +268,24 @@ def _dataset_payload(agg: db.ArtistAggregate) -> dict[str, Any]:
     }
 
 
+@app.get("/api/artist/suggest")
+def artist_suggest(
+    q: str = Query("", max_length=120),
+    limit: int = Query(8, ge=1, le=20),
+) -> dict[str, Any]:
+    """Typeahead suggestions from the precomputed dataset (instant, no fetch).
+
+    Powers the search-box autocomplete: a short DB query over the dataset
+    artists, returning display names plus catalogue size to disambiguate.
+    """
+    rows = db.search_artist_aggregates(q, limit=limit)
+    return {
+        "suggestions": [
+            {"name": r.display_name, "song_count": r.song_count} for r in rows
+        ]
+    }
+
+
 @app.get("/api/artist/pool")
 def artist_pool(
     name: str = Query(..., min_length=1),
