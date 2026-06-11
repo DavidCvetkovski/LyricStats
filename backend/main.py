@@ -115,7 +115,7 @@ def song(
     cached = db.load_stats(db_song) if db_song else None
     # Migrate old caches that pre-date new fields (e.g. section_sequence)
     if cached and "section_sequence" in cached:
-        st = stats.SongStats(**cached)
+        st = stats.SongStats.from_dict(cached)
     else:
         st = stats.compute(s.lyrics)
         if db_song:
@@ -176,7 +176,7 @@ def _aggregate_payload(name: str, n: int, shuffle: str) -> dict[str, Any]:
         if cached and "word_count" in cached:
             if cached["word_count"] == 0:
                 continue
-            st = stats.SongStats(**cached)
+            st = stats.SongStats.from_dict(cached)
         else:
             st = stats.compute(s.lyrics)
             db.save_stats(s, st.to_dict())

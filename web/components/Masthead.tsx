@@ -1,13 +1,7 @@
 import Link from "next/link";
+import { DateLine } from "./DateLine";
 
 export function Masthead() {
-  const today = new Date().toLocaleDateString("en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-
   return (
     <header className="border-b border-rule-strong">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 pt-5 sm:pt-7 pb-5 sm:pb-6">
@@ -15,7 +9,9 @@ export function Masthead() {
             ends so the row never wraps and the type stays readable. */}
         <div className="flex items-center justify-between gap-3 sm:gap-6 text-[0.62rem] sm:text-[0.7rem] uppercase tracking-[0.16em] sm:tracking-[0.18em] text-ink-mute">
           <span className="truncate">Vol. I · No. 1</span>
-          <span className="hidden md:inline truncate">{today}</span>
+          <span className="hidden md:inline truncate">
+            <DateLine />
+          </span>
           <span className="truncate">Est. 2026</span>
         </div>
 

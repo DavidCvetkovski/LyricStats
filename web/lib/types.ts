@@ -28,7 +28,7 @@ export type SongPayload = {
   title: string;
   album: string | null;
   year: number | null;
-  source: "cache" | "genius" | "ovh";
+  source: "cache" | "genius" | "lrclib" | "ovh";
   lyrics: string;
   stats: SongStats;
 };

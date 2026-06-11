@@ -7,10 +7,10 @@ sentiment, Flesch readability) is left as a stub for Epoch 4.
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from typing import Any
 
-from .text import Section, all_lines, char_count, parse_sections, tokenize
+from .text import all_lines, char_count, parse_sections, tokenize
 
 
 # Multilingual stopword list — small, hand-rolled. Covers EN + BHS.
@@ -76,6 +76,13 @@ class SongStats:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "SongStats":
+        """Build from a cached stats dict, ignoring keys from older/newer
+        schema versions so a stale cache entry can't raise TypeError."""
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in d.items() if k in known})
 
 
 def compute(lyrics: str, *, top_n: int = 20, longest_n: int = 10) -> SongStats:

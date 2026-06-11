@@ -272,14 +272,17 @@ function ArtistPageInner() {
   );
 }
 
+type SortField = "title" | "words" | "unique" | "variety";
+type SortOrder = "asc" | "desc";
+
 function ArtistView({ data }: { data: ArtistPayload }) {
   const s = data.stats;
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortField, setSortField] = useState<"title" | "words" | "unique" | "variety">("words");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [sortField, setSortField] = useState<SortField>("words");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
 
-  const handleSort = (field: "title" | "words" | "unique" | "variety") => {
+  const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
@@ -455,7 +458,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
               <select
                 value={`${sortField}-${sortOrder}`}
                 onChange={(e) => {
-                  const [field, order] = e.target.value.split("-") as [any, any];
+                  const [field, order] = e.target.value.split("-") as [SortField, SortOrder];
                   setSortField(field);
                   setSortOrder(order);
                 }}

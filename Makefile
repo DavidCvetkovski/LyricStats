@@ -1,10 +1,15 @@
-.PHONY: install run test fmt lint clean
+.PHONY: install run api test fmt lint clean
 
 install:
 	uv sync --extra dev
 
+# Starts FastAPI (:8000) + Next.js (:3000) together.
 run:
-	uv run streamlit run streamlit_app.py
+	./start.sh
+
+# Backend only.
+api:
+	uv run uvicorn backend.main:app --reload --port 8000
 
 test:
 	uv run pytest -q

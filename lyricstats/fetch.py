@@ -588,9 +588,9 @@ def fetch_artist_catalogue(
     """Save a uniformly random sample of `min_songs` from the artist's catalogue
     in one blocking call.
 
-    Thin wrapper composing `resolve_and_sample` + `fetch_one_by_id`. Used by the
-    Streamlit app, the seed scripts, and tests; the Vercel frontend drives the
-    two halves itself so each HTTP request stays short. Saved count is at most
+    Thin wrapper composing `resolve_and_sample` + `fetch_one_by_id`. Used by
+    the seed scripts and tests; the Vercel frontend drives the two halves
+    itself so each HTTP request stays short. Saved count is at most
     `min_songs`; songs without findable lyrics are silently skipped.
     """
     n = min(min_songs, hard_cap)

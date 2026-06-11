@@ -2,27 +2,39 @@
 
 A small web app that shows stats for lyrics — per song and per artist.
 
-Pulls lyrics from Genius (with a lyrics.ovh fallback), caches everything locally in SQLite, and computes a growing set of stats: word counts, vocabulary richness, top words, structure, line repetition, chorus share, and more.
+Pulls lyrics from Genius (with lrclib / lyrics.ovh fallbacks), caches everything in SQLite locally (Postgres in production), and computes a growing set of stats: word counts, vocabulary richness, top words, structure, line repetition, chorus share, and more.
 
-See [PLAN.md](PLAN.md) for the full roadmap.
+See [PLAN.md](PLAN.md) for the original roadmap (historical — it predates the move from Streamlit to FastAPI + Next.js).
 
 ## Run it
 
-Prereqs: [`uv`](https://docs.astral.sh/uv/) and a free Genius API token from <https://genius.com/api-clients>.
+Prereqs: [`uv`](https://docs.astral.sh/uv/), Node.js (with `npm`), and a free Genius API token from <https://genius.com/api-clients>.
 
 ```bash
 cp .env.example .env
 # put your token in .env: GENIUS_TOKEN=...
-make install
-make run
+make run        # starts FastAPI on :8000 and Next.js on :3000
 ```
 
-Then open the URL Streamlit prints (usually <http://localhost:8501>).
+Then open <http://localhost:3000>. (`make api` runs the backend alone.)
+
+## Deploy
+
+Two Vercel projects, both linked in this repo:
+
+- **`lyricstats-api`** (repo root) — the FastAPI backend as a Python serverless function (`api/index.py`, rewritten via `vercel.json`). Needs `DATABASE_URL`, `GENIUS_TOKEN`, `GENIUS_SCRAPE=0`, and optionally `SEED_KEY`.
+- **`lyricstats`** (`web/`) — the Next.js frontend. Needs `NEXT_PUBLIC_API_BASE` pointing at the API project.
+
+```bash
+vercel --prod            # deploy the API (from the repo root)
+cd web && vercel --prod  # deploy the frontend
+```
 
 ## Tests
 
 ```bash
-make test
+make test            # python: pytest
+cd web && npm test   # frontend: vitest
 ```
 
 ## Status

@@ -29,7 +29,7 @@ def main():
     try:
         prod_engine = create_engine(prod_url, echo=False)
         # Test connection
-        with prod_engine.connect() as conn:
+        with prod_engine.connect():
             pass
     except Exception as e:
         print(f"Error connecting to production database: {e}")

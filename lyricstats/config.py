@@ -34,7 +34,7 @@ GENIUS_SCRAPE: bool = _truthy(get("GENIUS_SCRAPE", "1"), default=True)
 SEED_KEY: str | None = get("SEED_KEY")
 
 # Postgres (Neon, etc.) in production; falls back to a local SQLite file when
-# DATABASE_URL is unset so local dev / tests / Streamlit keep working as before.
+# DATABASE_URL is unset so local dev and tests keep working as before.
 DATABASE_URL: str | None = get("DATABASE_URL")
 DB_PATH: Path = Path(get("LYRICSTATS_DB", "./data/lyricstats.db") or "./data/lyricstats.db")
 
