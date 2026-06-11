@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SITE_URL } from "@/lib/site";
 
 /**
  * Front page = Issue 01, cover to cover. No mission-statement hero; the
@@ -6,9 +7,29 @@ import Link from "next/link";
  * database: the duo's full catalogues (492 deduplicated songs, 180,713 words)
  * plus per-track analysis of GODZILLA (2026).
  */
+
+// Article rich-result data for the Issue 01 feature.
+const articleData = {
+  "@context": "https://schema.org",
+  "@type": "Article",
+  headline: "The Monsters of Sarajevo",
+  description:
+    "A data-driven feature on Jala Brat & Buba Corelli's album GODZILLA, read against every word of their 492-song catalogue.",
+  image: [`${SITE_URL}/opengraph-image`],
+  datePublished: "2026-06-09",
+  dateModified: "2026-06-11",
+  author: { "@id": `${SITE_URL}/#organization` },
+  publisher: { "@id": `${SITE_URL}/#organization` },
+  mainEntityOfPage: SITE_URL,
+};
+
 export default function Home() {
   return (
     <article className="mx-auto max-w-6xl px-4 sm:px-6 pt-8 sm:pt-12 pb-16 sm:pb-20">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(articleData) }}
+      />
       {/* ===== Issue 01 opener ===== */}
       <header className="rise rise-1 border-b-4 border-double border-rule-strong pb-8 sm:pb-10">
         <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">

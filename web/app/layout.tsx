@@ -24,14 +24,18 @@ const mono = JetBrains_Mono({
   display: "swap",
 });
 
+const DESCRIPTION =
+  "A quarterly statistical review of popular lyrics. We count every word, " +
+  "rhyme and chorus to read songs and artists as data. In Issue 01: The " +
+  "Monsters of Sarajevo, on Jala Brat & Buba Corelli's album GODZILLA.";
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
     default: "LyricStats · lyric statistics for songs and artists",
     template: "%s · LyricStats",
   },
-  description:
-    "LyricStats counts the words, rhymes and choruses of a song. Vocabulary size, repetition, chorus share and signature words, per song and per artist.",
+  description: DESCRIPTION,
   alternates: {
     canonical: "/",
   },
@@ -40,16 +44,39 @@ export const metadata: Metadata = {
     type: "website",
     url: "/",
     title: "LyricStats · lyric statistics for songs and artists",
-    description:
-      "LyricStats counts the words, rhymes and choruses of a song. Vocabulary size, repetition, chorus share and signature words, per song and per artist.",
+    description: DESCRIPTION,
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
   },
   robots: {
     index: true,
     follow: true,
   },
+};
+
+// Tells Google the site's brand name and logo (site-name display, knowledge
+// of the lyricstats.dev ↔ LyricStats pairing in search results).
+const structuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      url: SITE_URL,
+      name: "LyricStats",
+      alternateName: "lyricstats.dev",
+      description: DESCRIPTION,
+      publisher: { "@id": `${SITE_URL}/#organization` },
+    },
+    {
+      "@type": "Organization",
+      "@id": `${SITE_URL}/#organization`,
+      name: "LyricStats",
+      url: SITE_URL,
+      logo: `${SITE_URL}/apple-icon.png`,
+    },
+  ],
 };
 
 export default function RootLayout({
@@ -61,6 +88,10 @@ export default function RootLayout({
       className={`${serif.variable} ${sans.variable} ${mono.variable} h-full`}
     >
       <body className="min-h-full flex flex-col paper-grain">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
         <Masthead />
         <main className="flex-1 w-full">{children}</main>
         <Colophon />
