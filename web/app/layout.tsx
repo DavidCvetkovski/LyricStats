@@ -3,6 +3,7 @@ import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Masthead } from "@/components/Masthead";
 import { Colophon } from "@/components/Colophon";
+import { SITE_URL } from "@/lib/site";
 
 const serif = Fraunces({
   variable: "--font-serif",
@@ -24,8 +25,31 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LyricStats",
-  description: "Stats for lyrics, per song and per artist.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "LyricStats — lyric statistics for songs and artists",
+    template: "%s — LyricStats",
+  },
+  description:
+    "LyricStats counts the words, rhymes and choruses of a song. Vocabulary size, repetition, chorus share and signature words, per song and per artist.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    siteName: "LyricStats",
+    type: "website",
+    url: "/",
+    title: "LyricStats — lyric statistics for songs and artists",
+    description:
+      "LyricStats counts the words, rhymes and choruses of a song. Vocabulary size, repetition, chorus share and signature words, per song and per artist.",
+  },
+  twitter: {
+    card: "summary",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({

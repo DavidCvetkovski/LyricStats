@@ -12,6 +12,17 @@ import type { NextConfig } from "next";
 const API_INTERNAL = process.env.API_INTERNAL || "http://127.0.0.1:8000";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    // Collapse www onto the apex domain so search engines index one host.
+    return [
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "www.lyricstats.dev" }],
+        destination: "https://lyricstats.dev/:path*",
+        permanent: true,
+      },
+    ];
+  },
   async rewrites() {
     return [
       {
