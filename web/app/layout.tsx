@@ -27,8 +27,8 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "LyricStats — lyric statistics for songs and artists",
-    template: "%s — LyricStats",
+    default: "LyricStats · lyric statistics for songs and artists",
+    template: "%s · LyricStats",
   },
   description:
     "LyricStats counts the words, rhymes and choruses of a song. Vocabulary size, repetition, chorus share and signature words, per song and per artist.",
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
     siteName: "LyricStats",
     type: "website",
     url: "/",
-    title: "LyricStats — lyric statistics for songs and artists",
+    title: "LyricStats · lyric statistics for songs and artists",
     description:
       "LyricStats counts the words, rhymes and choruses of a song. Vocabulary size, repetition, chorus share and signature words, per song and per artist.",
   },

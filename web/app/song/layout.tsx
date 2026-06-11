@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     siteName: "LyricStats",
     type: "website",
     url: "/song",
-    title: "Song Statistics — LyricStats",
+    title: "Song Statistics · LyricStats",
     description:
       "Pick a song and read its statistics: unique words, lexical variety, repetition, chorus share and the words it leans on most.",
   },

@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     siteName: "LyricStats",
     type: "website",
     url: "/artist",
-    title: "Artist Statistics — LyricStats",
+    title: "Artist Statistics · LyricStats",
     description:
       "Read an artist's whole catalogue as numbers: total vocabulary, lexical variety, average chorus share, repetition and their most frequent words.",
   },
