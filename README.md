@@ -1,8 +1,10 @@
 # LyricStats
 
-A small web app that shows stats for lyrics — per song and per artist.
+A small web app that shows stats for lyrics — per song and per artist. **Live at [lyricstats.dev](https://lyricstats.dev)** (API at [api.lyricstats.dev](https://api.lyricstats.dev)).
 
 Pulls lyrics from Genius (with lrclib / lyrics.ovh fallbacks), caches everything in SQLite locally (Postgres in production), and computes a growing set of stats: word counts, vocabulary richness, top words, structure, line repetition, chorus share, and more.
+
+The site is styled as a quarterly broadsheet: the front page is the current issue's feature essay, written from the database itself. Issue 01, "The Monsters of Sarajevo," reads Jala Brat & Buba Corelli's full catalogues (492 songs, 180k words) against their 2026 album *GODZILLA*.
 
 See [PLAN.md](PLAN.md) for the original roadmap (historical — it predates the move from Streamlit to FastAPI + Next.js).
 
@@ -30,6 +32,8 @@ vercel --prod            # deploy the API (from the repo root)
 cd web && vercel --prod  # deploy the frontend
 ```
 
+Custom domains: `lyricstats.dev` (frontend; `www` redirects to the apex) and `api.lyricstats.dev` (API). The frontend ships `sitemap.xml`, `robots.txt`, and canonical/OG metadata — see [web/README.md](web/README.md#seo).
+
 ## Tests
 
 ```bash
@@ -43,7 +47,7 @@ cd web && npm test   # frontend: vitest
 - ✅ Epoch 2 — core stats (lexical, structural, top words, charts)
 - ✅ Epoch 3 — artist view (catalogue aggregation, sortable table)
 - ⏳ Epoch 4 — rhyme, sentiment, readability, language mix
-- ⏳ Epoch 5 — comparison page + deploy
+- 🟡 Epoch 5 — comparison page (deploy ✅ — live at [lyricstats.dev](https://lyricstats.dev))
 
 ## License
 
