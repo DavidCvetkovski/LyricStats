@@ -72,6 +72,9 @@ export function ArtistAutocomplete({
 
   const rootRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Track whether the last input change came from user typing/editing, so we
+  // don't show the suggestions list on initial mount or parameter restoration.
+  const isUserTyping = useRef(false);
   // The text in the field at the moment a suggestion was picked. While the
   // typed value still equals this, we keep the menu shut so it doesn't reopen
   // onto the very name we just chose.
@@ -94,8 +97,10 @@ export function ArtistAutocomplete({
 
     const show = (full: ArtistSuggestion[]) => {
       setItems(full.slice(0, SHOW));
-      setActive(-1);
-      setOpen(full.length > 0);
+      setActive(full.length > 0 ? 0 : -1);
+      if (isUserTyping.current) {
+        setOpen(full.length > 0);
+      }
     };
 
     // 1. Served entirely from cache (exact or narrowed) → instant, no network.
@@ -129,7 +134,10 @@ export function ArtistAutocomplete({
   // Close when focus or a click lands outside the widget.
   useEffect(() => {
     function onDocPointer(e: PointerEvent) {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(e.target as Node)) {
+        setOpen(false);
+        isUserTyping.current = false;
+      }
     }
     document.addEventListener("pointerdown", onDocPointer);
     return () => document.removeEventListener("pointerdown", onDocPointer);
@@ -137,6 +145,7 @@ export function ArtistAutocomplete({
 
   function pick(name: string) {
     justPicked.current = name;
+    isUserTyping.current = false;
     onChange(name);
     setItems([]);
     setOpen(false);
@@ -166,6 +175,7 @@ export function ArtistAutocomplete({
       case "Escape":
         e.preventDefault();
         setOpen(false);
+        isUserTyping.current = false;
         break;
     }
   }
@@ -177,11 +187,11 @@ export function ArtistAutocomplete({
         type="text"
         placeholder={placeholder}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={onKeyDown}
-        onFocus={() => {
-          if (items.length > 0) setOpen(true);
+        onChange={(e) => {
+          isUserTyping.current = true;
+          onChange(e.target.value);
         }}
+        onKeyDown={onKeyDown}
         autoFocus={autoFocus}
         role="combobox"
         aria-expanded={open}

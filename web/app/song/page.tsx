@@ -33,12 +33,12 @@ function SongPageInner() {
 
   const [artist, setArtist] = useState(() => {
     if (urlArtist) return urlArtist;
-    if (cached) return cached.data.artist;
+    if (cached) return cached.key.split("|")[0];
     return "";
   });
   const [title, setTitle] = useState(() => {
     if (urlTitle) return urlTitle;
-    if (cached) return cached.data.title;
+    if (cached) return cached.key.split("|")[1];
     return "";
   });
   const [loading, setLoading] = useState(false);
@@ -239,7 +239,7 @@ function SongView({ song }: { song: SongPayload }) {
 
       <section className="grid gap-10 sm:gap-12 lg:grid-cols-[1.1fr_1fr] mt-12">
         <div>
-          <WordTable title="Most-used Words" rows={s.top_words_no_stop} max={15} />
+          <WordTable title="Most-used Words" rows={s.top_words_no_stop} />
           <p className="mt-3 text-[0.78rem] italic text-ink-mute">
             Stopwords filtered. The bar beneath each word is its share of the
             most-used.

@@ -41,7 +41,7 @@ function ArtistPageInner() {
 
   const [name, setName] = useState(() => {
     if (urlName) return urlName;
-    if (cached) return cached.data.name;
+    if (cached) return cached.key.split("|")[0];
     return "";
   });
   // Songs-count input removed — we always aggregate the whole catalogue.
@@ -412,6 +412,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
               label="Longest song"
               title={s.longest_song.title}
               detail={`${s.longest_song.words} words`}
+              artistName={data.name}
             />
           )}
           {s.richest_song?.title && (
@@ -419,6 +420,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
               label="Widest vocabulary"
               title={s.richest_song.title}
               detail={`${((s.richest_song.ttr ?? 0) * 100).toFixed(1)}% variety`}
+              artistName={data.name}
             />
           )}
           {s.shortest_song?.title && (
@@ -426,11 +428,12 @@ function ArtistView({ data }: { data: ArtistPayload }) {
               label="Shortest song"
               title={s.shortest_song.title}
               detail={`${s.shortest_song.words} words`}
+              artistName={data.name}
             />
           )}
         </div>
 
-        <WordTable title="Most-used Words" rows={s.top_words_no_stop} max={20} />
+        <WordTable title="Most-used Words" rows={s.top_words_no_stop} />
       </section>
 
       {hasCatalogue && (
@@ -582,18 +585,35 @@ function Highlight({
   label,
   title,
   detail,
+  artistName,
 }: {
   label: string;
   title: string;
   detail: string;
+  artistName?: string;
 }) {
-  return (
-    <div className="border-b border-rule pb-5">
+  const content = (
+    <div className="border-b border-rule pb-5 group">
       <p className="smallcaps mb-1">{label}</p>
-      <p className="font-serif text-3xl text-ink leading-tight">{title}</p>
+      <p className={`font-serif text-3xl text-ink leading-tight ${artistName ? "group-hover:text-accent transition-colors" : ""}`}>
+        {title}
+      </p>
       <p className="text-[0.85rem] italic text-ink-mute mt-1">{detail}</p>
     </div>
   );
+
+  if (artistName) {
+    return (
+      <Link
+        href={`/song?artist=${encodeURIComponent(artistName)}&title=${encodeURIComponent(title)}`}
+        className="block no-underline"
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  return content;
 }
 
 function Mini({ label, value }: { label: string; value: string }) {
