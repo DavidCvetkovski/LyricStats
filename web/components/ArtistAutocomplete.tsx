@@ -143,6 +143,22 @@ export function ArtistAutocomplete({
     return () => document.removeEventListener("pointerdown", onDocPointer);
   }, []);
 
+  // Close when the tab is hidden or restored (tab switch, bfcache back/forward,
+  // browser form-state restoration) — the menu should only ever appear in
+  // direct response to typing, never "greet" the reader on return.
+  useEffect(() => {
+    function shut() {
+      setOpen(false);
+      isUserTyping.current = false;
+    }
+    document.addEventListener("visibilitychange", shut);
+    window.addEventListener("pageshow", shut);
+    return () => {
+      document.removeEventListener("visibilitychange", shut);
+      window.removeEventListener("pageshow", shut);
+    };
+  }, []);
+
   function pick(name: string) {
     justPicked.current = name;
     isUserTyping.current = false;
