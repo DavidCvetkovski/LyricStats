@@ -329,6 +329,72 @@ def _best(rows, key, *, biggest=True, min_wc=80):
     return r
 
 
+
+# Bracketed qualifiers, dash suffixes, and trailing descriptors that mark a
+# release variant of the same song ("Slut! (Taylor's Version) [From The
+# Vault]", "Love Story - Live at the BBC", '"Change" music video', ...).
+BRACKET_SEG_RE = re.compile(r"[\(\[\{][^)\]\}]*[\)\]\}]")
+DASH_SUFFIX_RE = re.compile(r"\s[-\u2013\u2014]\s.*$")
+VARIANT_SUFFIX_RE = re.compile(
+    r"\s*\b(music video|official video|lyric video|lyrics video|"
+    r"official audio|visualizer|sped up|slowed down|slowed|reverb|"
+    r"acoustic version|acoustic|live version|live|remix|instrumental|"
+    r"karaoke version|karaoke|demo|remastered|remaster|radio edit|"
+    r"single version|album version|extended mix|extended version|extended|"
+    r"bonus track|mono|stereo|deluxe|edit|version|mv)\s*$",
+    re.IGNORECASE)
+
+
+def _alnum_squash(s: str) -> str:
+    s = unicodedata.normalize("NFKD", s.lower())
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = "".join(c if (c.isalnum() or c.isspace()) else " " for c in s)
+    return " ".join(s.split())
+
+
+def canonical_title(title: str) -> str:
+    """Collapse release variants of the same song onto one dedupe key.
+
+    "Slut!", '"Slut!" (Taylor's Version) [From The Vault]' and
+    "Slut! - Acoustic" must all map to "slut"; "Red" and "Red 2" must not.
+    """
+    s = (title or "").replace("\x00", "")
+    s = BRACKET_SEG_RE.sub(" ", s)
+    s = DASH_SUFFIX_RE.sub(" ", s)
+    s = _alnum_squash(s)
+    for _ in range(4):
+        s2 = VARIANT_SUFFIX_RE.sub("", s).strip()
+        if s2 == s:
+            break
+        s = s2
+    # Titles that were nothing but qualifiers ("Live", "(Untitled)") fall
+    # back to their plain squashed form so they keep a non-empty key.
+    return s or _alnum_squash(title or "") or (title or "").strip().lower()
+
+
+def drop_truncation_stubs(aggs: list[tuple]) -> tuple[list[tuple], int]:
+    """Drop aggregates whose display name is an encoding-truncated prefix of
+    a much bigger artist ("beyonc" 52 next to "Beyoncé" 2067). Only fires
+    when the longer name continues with a NON-ascii char, so real artists
+    that happen to prefix bigger ones (Emin / Eminem) are untouched."""
+    order = sorted(range(len(aggs)), key=lambda i: aggs[i][1].lower())
+    drop: set[int] = set()
+    for pos, i in enumerate(order):
+        d = aggs[i][1]
+        dl = d.lower()
+        if len(dl) < 4:
+            continue
+        n = aggs[i][2]["song_count"]
+        for j in order[pos + 1: pos + 40]:
+            od, on = aggs[j][1], aggs[j][2]["song_count"]
+            if not od.lower().startswith(dl):
+                break  # sorted: the prefix block is contiguous
+            if len(od) > len(d) and ord(od[len(d)]) > 127 and on >= 10 * n:
+                drop.add(i)
+                break
+    return [a for i, a in enumerate(aggs) if i not in drop], len(drop)
+
+
 def fold_artist(rows: list[dict], *, min_songs: int, clf,
                 songs_cap: int = 500) -> tuple | None:
     # U+FFFD in the artist name = broken encoding upstream; the healthy
@@ -336,10 +402,16 @@ def fold_artist(rows: list[dict], *, min_songs: int, clf,
     rows = [r for r in rows
             if "�" not in r["artist"]
             and not is_non_song(r["title"], r["wc"], clf=clf)]
-    # in-artist dedupe across albums (same title on album + deluxe + single)
+    # NUL bytes from broken submissions break Postgres later; strip on entry
+    for r in rows:
+        for f in ("artist", "title", "album"):
+            if r[f] and "\x00" in r[f]:
+                r[f] = r[f].replace("\x00", "")
+    # Dedupe release variants of the same song: "(Taylor's Version)",
+    # "- Acoustic", "[From The Vault]" and friends all fold onto one key.
     by_title: dict[str, dict] = {}
     for r in rows:
-        k = r["tkey"]
+        k = canonical_title(r["title"])
         cur = by_title.get(k)
         if cur is None or (r["has_synced"], r["wc"]) > (cur["has_synced"], cur["wc"]):
             by_title[k] = r
@@ -472,10 +544,10 @@ def backfill_years(display: str, stats: dict, songs_list: list,
     years = {}
     for old in json.loads(row[0]):
         if len(old) >= 2 and old[1]:
-            years[_norm_line(str(old[0]))] = old[1]
+            years[canonical_title(str(old[0]))] = old[1]
     hits = 0
     for r in songs_list:
-        y = years.get(_norm_line(str(r[0])))
+        y = years.get(canonical_title(str(r[0])))
         if y:
             r[1] = y
             hits += 1
@@ -698,6 +770,9 @@ def main() -> None:
         stream_songs(args.dump, TMP_PATH, limit=args.limit)
     print("phase 2: folding artists…", flush=True)
     aggs = fold(TMP_PATH, min_songs=args.min_songs, songs_cap=args.songs_cap)
+    aggs, n_stubs = drop_truncation_stubs(aggs)
+    if n_stubs:
+        print(f"  dropped {n_stubs} truncation-stub artists", flush=True)
     print("phase 3: corpus pass…", flush=True)
     corpus_pass(aggs)
     if args.final:
