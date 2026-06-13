@@ -349,29 +349,6 @@ function ArtistView({ data }: { data: ArtistPayload }) {
             a random sample of {data.sampled} drawn from a catalogue of {data.cached_total}
           </p>
         )}
-        {data.genius_url && (
-          <p className="mt-3 text-[0.78rem] smallcaps">
-            <a
-              href={data.genius_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-accent transition-colors underline decoration-rule-strong underline-offset-4 hover:decoration-accent"
-            >
-              wrong artist? · view on Genius{" "}
-              <svg
-                className="inline-block w-2.5 h-2.5 ml-0.5 align-baseline"
-                viewBox="0 0 12 12"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M3.5 2.5h6v6M9.5 2.5l-7 7" />
-              </svg>
-            </a>
-          </p>
-        )}
       </header>
 
       {s.top_words_no_stop[0] && (

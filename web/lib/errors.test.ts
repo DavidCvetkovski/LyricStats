@@ -8,17 +8,17 @@ describe("friendlyError", () => {
     expect(e.suggestion).toMatch(/backend|api/i);
   });
 
-  it("maps a 401 invalid_token response to a token-rotation message", () => {
+  it("maps a 401 response to a credentials-error message", () => {
     const e = friendlyError(
       new Error(
         'API 401: {"error":"invalid_token","error_description":"The access token provided is expired"}',
       ),
     );
-    expect(e.headline.toLowerCase()).toContain("genius");
-    expect(e.suggestion).toMatch(/token|rotate|generate/i);
+    expect(e.headline.toLowerCase()).toContain("credentials");
+    expect(e.suggestion).toMatch(/token|rotate|configuration/i);
   });
 
-  it("maps a Genius 'Could not find lyrics' 404 to a not-found message", () => {
+  it("maps a 'Could not find lyrics' 404 to a not-found message", () => {
     const e = friendlyError(
       new Error(
         "API 404: Could not find lyrics for 'The Technicolors — Howl' on Genius or lyrics.ovh.",
@@ -31,7 +31,7 @@ describe("friendlyError", () => {
   it("maps a 429 to a rate-limit message", () => {
     const e = friendlyError(new Error("API 429: Too Many Requests"));
     expect(e.headline.toLowerCase()).toContain("slow down");
-    expect(e.suggestion).toMatch(/wait|already on file/i);
+    expect(e.suggestion).toMatch(/wait|cached/i);
   });
 
   it("maps a broken NDJSON stream to a connection-cut message", () => {

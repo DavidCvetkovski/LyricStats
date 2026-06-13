@@ -66,36 +66,36 @@ export function friendlyError(err: unknown): FriendlyError {
 
   if (AUTH_PATTERNS.some((p) => p.test(raw))) {
     return {
-      headline: "The Genius API key isn't accepted.",
+      headline: "The API credentials are not accepted.",
       detail:
-        "Genius has either rate-limited the token or it's been rotated since the server started.",
+        "The lyric database service rejected our authentication.",
       suggestion:
-        "Generate a fresh Client Access Token on genius.com and restart the API.",
+        "Verify the configuration and API tokens in the environment, then restart the server.",
     };
   }
 
   if (RATE_LIMIT_PATTERNS.some((p) => p.test(raw))) {
     return {
-      headline: "Genius is asking us to slow down.",
-      detail: "We've hit the rate limit on their API.",
-      suggestion: "Wait a minute and try again — or try a song that's already on file.",
+      headline: "The lyric service is asking us to slow down.",
+      detail: "We have hit the rate limit on the external API.",
+      suggestion: "Wait a minute and try again — or try a song that's already cached.",
     };
   }
 
   if (NOT_FOUND_PATTERNS.some((p) => p.test(raw))) {
     return {
-      headline: "Couldn't find this on Genius.",
+      headline: "Couldn't find lyrics for this song.",
       detail:
-        "It may be filed under a slightly different name, or it hasn't been indexed.",
-      suggestion: "Try a different spelling, drop a 'The', or pick another track.",
+        "The song may be filed under a slightly different spelling, or it is not indexed in the lyric database.",
+      suggestion: "Try a different spelling, drop a 'The', or choose another song.",
     };
   }
 
   if (STREAM_BROKEN_PATTERNS.some((p) => p.test(raw))) {
     return {
       headline: "The connection cut out mid-fetch.",
-      detail: "Sometimes Genius drops a request when a catalogue is large.",
-      suggestion: "Try again with fewer songs, or untick 'Fetch fresh from Genius'.",
+      detail: "The request was dropped because the catalogue is too large.",
+      suggestion: "Try again in a moment, or view a smaller catalogue.",
     };
   }
 
