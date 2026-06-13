@@ -50,6 +50,29 @@ def test_different_songs_stay_distinct():
     assert imp.canonical_title("Forever") != imp.canonical_title("Forever Young")
 
 
+def test_artist_prefix_stripped_not_song():
+    # "Taylor Swift - Bad Blood" must dedupe as the song, not the artist name.
+    assert imp.canonical_title("Taylor Swift - Bad Blood", "Taylor Swift") == \
+        imp.canonical_title("Bad Blood")
+    assert imp.canonical_title("Taylor Swift -  So High School", "Taylor Swift") == \
+        imp.canonical_title("So High School")
+    # Distinct songs under the same artist prefix stay distinct.
+    a = imp.canonical_title("Taylor Swift - Bad Blood", "Taylor Swift")
+    b = imp.canonical_title("Taylor Swift - So High School", "Taylor Swift")
+    assert a != b
+
+
+def test_bare_dash_not_a_descriptor_kept():
+    # No descriptor word in the tail → not a variant, keep both sides distinct.
+    assert imp.canonical_title("Marry The Night - John") != \
+        imp.canonical_title("Marry The Night")
+    # Descriptor in the tail → variant, strip it.
+    assert imp.canonical_title("Love Story - Digital Dog Remix") == \
+        imp.canonical_title("Love Story")
+    assert imp.canonical_title("Shake It Off - Live at the BBC") == \
+        imp.canonical_title("Shake It Off")
+
+
 def test_descriptor_only_titles_keep_a_key():
     # A song literally titled "Live" must not collapse to an empty key.
     assert imp.canonical_title("Live") == "live"
@@ -67,6 +90,54 @@ def test_diacritics_and_nul_handling():
 
 def _agg(display: str, count: int) -> tuple:
     return ("key", display, {"song_count": count}, [])
+
+
+# ── content fingerprint + union dedup ────────────────────────────────────────
+
+from collections import Counter
+
+
+def test_content_fingerprint_ignores_order_and_rare_words():
+    a = Counter("love story romeo juliet baby".split() * 3 + ["the"] * 10)
+    b = Counter("baby juliet romeo story love".split() * 3 + ["a"] * 10)
+    assert imp.content_fingerprint(a) == imp.content_fingerprint(b)
+
+
+def _row(title, wc, toks, synced=0):
+    return {"title": title, "artist": "Taylor Swift", "wc": wc,
+            "has_synced": synced, "toks": ""}, Counter(toks.split())
+
+
+def test_dedupe_merges_title_typo_via_content():
+    # Same lyrics, one title is a typo → must collapse to one song.
+    lyr = "you re on your own kid grew up fast"
+    rows, toks = [], []
+    for title in ["You're On Your Own Kid", "05 You're On Your Own Kid",
+                  "You Re Own Your Own Kid"]:
+        r, c = _row(title, 40, lyr)
+        rows.append(r)
+        toks.append(c)
+    keep = imp._dedupe_songs(rows, toks)
+    assert len(keep) == 1
+
+
+def test_dedupe_keeps_distinct_songs():
+    rows, toks = [], []
+    for title, lyr in [("Love Story", "romeo juliet baby marry castle"),
+                       ("Bad Blood", "band aids bullet holes mad scars"),
+                       ("Style", "midnights james dean daydream tshirt")]:
+        r, c = _row(title, 40, lyr)
+        rows.append(r)
+        toks.append(c)
+    keep = imp._dedupe_songs(rows, toks)
+    assert len(keep) == 3
+
+
+def test_dedupe_prefers_synced_then_longest():
+    r1, c1 = _row("Karma", 100, "karma cat purring " * 10)
+    r2, c2 = _row("Karma", 120, "karma cat purring " * 12, synced=1)
+    keep = imp._dedupe_songs([r1, r2], [c1, c2])
+    assert keep == [1]  # synced wins
 
 
 def test_truncation_stub_dropped():

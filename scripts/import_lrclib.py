@@ -334,15 +334,22 @@ def _best(rows, key, *, biggest=True, min_wc=80):
 # release variant of the same song ("Slut! (Taylor's Version) [From The
 # Vault]", "Love Story - Live at the BBC", '"Change" music video', ...).
 BRACKET_SEG_RE = re.compile(r"[\(\[\{][^)\]\}]*[\)\]\}]")
-DASH_SUFFIX_RE = re.compile(r"\s[-\u2013\u2014]\s.*$")
-VARIANT_SUFFIX_RE = re.compile(
-    r"\s*\b(music video|official video|lyric video|lyrics video|"
-    r"official audio|visualizer|sped up|slowed down|slowed|reverb|"
-    r"acoustic version|acoustic|live version|live|remix|instrumental|"
-    r"karaoke version|karaoke|demo|remastered|remaster|radio edit|"
-    r"single version|album version|extended mix|extended version|extended|"
-    r"bonus track|mono|stereo|deluxe|edit|version|mv)\s*$",
-    re.IGNORECASE)
+# Words that mark a release variant rather than a different song.
+_DESCRIPTOR = (
+    r"music video|official video|lyric[s]? video|official audio|visualizer|"
+    r"sped up|slowed down|slowed|reverb|acoustic|live|remix|mix|instrumental|"
+    r"karaoke|demo|remaster(?:ed)?|radio edit|single version|album version|"
+    r"extended|bonus track|mono|stereo|deluxe|edit|version|taylor'?s version|"
+    r"from the vault|cover|mashup|bootleg|rerecord(?:ed)?|re-record(?:ed)?|mv"
+)
+# A " - tail" is only a variant marker when the tail actually contains a
+# descriptor word ("Love Story - Digital Dog Remix"). A bare "A - B" with no
+# descriptor ("Taylor Swift - Bad Blood") is left intact for the prefix step.
+DASH_DESCRIPTOR_RE = re.compile(
+    r"\s[-\u2013\u2014]\s[^-]*\b(?:" + _DESCRIPTOR + r")\b.*$", re.IGNORECASE)
+VARIANT_SUFFIX_RE = re.compile(r"\s*\b(?:" + _DESCRIPTOR + r")\s*$", re.IGNORECASE)
+# "Artist - Song", "Artist: Song", "Artist | Song" redundant-credit prefix.
+ARTIST_PREFIX_RE = re.compile(r"^\s*(.+?)\s*[-:\u2013\u2014|]\s+(.+)$")
 
 
 def _alnum_squash(s: str) -> str:
@@ -352,15 +359,28 @@ def _alnum_squash(s: str) -> str:
     return " ".join(s.split())
 
 
-def canonical_title(title: str) -> str:
+def _strip_artist_prefix(title: str, artist: str | None) -> str:
+    """Drop a leading "<artist> - " credit so "Taylor Swift - Bad Blood"
+    dedupes as "Bad Blood", not as the artist's name."""
+    if not artist:
+        return title
+    m = ARTIST_PREFIX_RE.match(title)
+    if m and _alnum_squash(m.group(1)) == _alnum_squash(artist):
+        return m.group(2)
+    return title
+
+
+def canonical_title(title: str, artist: str | None = None) -> str:
     """Collapse release variants of the same song onto one dedupe key.
 
     "Slut!", '"Slut!" (Taylor's Version) [From The Vault]' and
-    "Slut! - Acoustic" must all map to "slut"; "Red" and "Red 2" must not.
+    "Slut! - Acoustic" all map to "slut"; "Red" and "Red 2" do not; and
+    "Taylor Swift - Bad Blood" maps to "bad blood", not "taylor swift".
     """
     s = (title or "").replace("\x00", "")
+    s = _strip_artist_prefix(s, artist)
     s = BRACKET_SEG_RE.sub(" ", s)
-    s = DASH_SUFFIX_RE.sub(" ", s)
+    s = DASH_DESCRIPTOR_RE.sub(" ", s)
     s = _alnum_squash(s)
     for _ in range(4):
         s2 = VARIANT_SUFFIX_RE.sub("", s).strip()
@@ -370,6 +390,55 @@ def canonical_title(title: str) -> str:
     # Titles that were nothing but qualifiers ("Live", "(Untitled)") fall
     # back to their plain squashed form so they keep a non-empty key.
     return s or _alnum_squash(title or "") or (title or "").strip().lower()
+
+
+def content_fingerprint(cnt: Counter) -> tuple | None:
+    """A song's identity from its lyrics: the top content words, sorted. Robust
+    to title typos, track-number prefixes and foreign re-spellings; two rows
+    with the same fingerprint are the same song under different titles."""
+    words = [w for w, _c in cnt.most_common(40)
+             if w not in STOPWORDS and len(w) > 2]
+    return tuple(sorted(words[:12])) or None
+
+
+def _dedupe_songs(rows: list[dict], toks: list[Counter]) -> list[int]:
+    """Return one representative row index per distinct song, merging by
+    canonical title OR shared lyric fingerprint (union-find). The kept row is
+    the richest variant: synced lyrics first, then the longest."""
+    parent = list(range(len(rows)))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        parent[find(a)] = find(b)
+
+    first_by_title: dict[str, int] = {}
+    first_by_fp: dict[tuple, int] = {}
+    for i, r in enumerate(rows):
+        tk = canonical_title(r["title"], r["artist"])
+        if tk in first_by_title:
+            union(i, first_by_title[tk])
+        else:
+            first_by_title[tk] = i
+        fp = content_fingerprint(toks[i])
+        if fp is not None:
+            if fp in first_by_fp:
+                union(i, first_by_fp[fp])
+            else:
+                first_by_fp[fp] = i
+
+    best: dict[int, int] = {}
+    for i, r in enumerate(rows):
+        root = find(i)
+        cur = best.get(root)
+        if cur is None or (r["has_synced"], r["wc"]) > \
+                (rows[cur]["has_synced"], rows[cur]["wc"]):
+            best[root] = i
+    return sorted(best.values())
 
 
 def drop_truncation_stubs(aggs: list[tuple]) -> tuple[list[tuple], int]:
@@ -407,15 +476,19 @@ def fold_artist(rows: list[dict], *, min_songs: int, clf,
         for f in ("artist", "title", "album"):
             if r[f] and "\x00" in r[f]:
                 r[f] = r[f].replace("\x00", "")
-    # Dedupe release variants of the same song: "(Taylor's Version)",
-    # "- Acoustic", "[From The Vault]" and friends all fold onto one key.
-    by_title: dict[str, dict] = {}
-    for r in rows:
-        k = canonical_title(r["title"])
-        cur = by_title.get(k)
-        if cur is None or (r["has_synced"], r["wc"]) > (cur["has_synced"], cur["wc"]):
-            by_title[k] = r
-    rows = list(by_title.values())
+    # Decode each row's vocabulary once; reused for the content fingerprint
+    # and the merged artist vocab below.
+    toks = [decode_tokens(r["toks"]) for r in rows]
+
+    # Dedupe to one row per distinct song. LRCLIB lists every release variant,
+    # cover, karaoke and mislabelled re-upload separately, so a single key can't
+    # catch them. We union two signals: same canonical title OR same lyric
+    # fingerprint (top content words). Title catches variants whose lyrics drift
+    # slightly (live, acoustic); content catches variants whose title is a typo,
+    # track number or foreign spelling. The union lands near real discographies.
+    keep = _dedupe_songs(rows, toks)
+    rows = [rows[i] for i in keep]
+    toks = [toks[i] for i in keep]
     n = len(rows)
     if n < min_songs:
         return None
@@ -423,8 +496,8 @@ def fold_artist(rows: list[dict], *, min_songs: int, clf,
     display = Counter(r["artist"] for r in rows).most_common(1)[0][0]
     total_words = sum(r["wc"] for r in rows)
     g: Counter[str] = Counter()
-    for r in rows:
-        g.update(decode_tokens(r["toks"]))
+    for c in toks:
+        g.update(c)
 
     eligible = [r for r in rows if r["wc"] >= 80 and not any(
         kw in r["title"].lower() for kw in _DEMO_KW)] or rows
