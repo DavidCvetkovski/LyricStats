@@ -1,4 +1,3 @@
-.tmp/
 .venv/
 __pycache__/
 *.pyc
@@ -21,3 +20,6 @@ web/next-env.d.ts
 
 .vercel
 .env*
+.tmp/
+tmp/
+scratch/

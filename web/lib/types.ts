@@ -59,6 +59,31 @@ export type ArtistStats = {
   longest_song: { title?: string; words?: number };
   shortest_song: { title?: string; words?: number };
   richest_song: { title?: string; ttr?: number };
+  // extended stats from dataset pipeline
+  avg_hook_share?: number;
+  avg_wpm?: number;
+  avg_rhyme?: number;
+  question_share?: number;
+  exclaim_share?: number;
+  one_word_line_share?: number;
+  avg_word_length?: number;
+  title_drops_total?: number;
+  synced_share?: number;
+  avg_first_word_s?: number;
+  longest_word?: string;
+  // highlights
+  career_line?: { line: string; count: number; title: string } | null;
+  fastest_song?: { title: string; wpm: number } | null;
+  slowest_song?: { title: string; wpm: number } | null;
+  biggest_title_drop?: { title: string; count: number } | null;
+  fastest_burst?: { title: string; words15s: number } | null;
+  longest_intro?: { title: string; s: number } | null;
+  longest_silence?: { title: string; s: number } | null;
+  density_curve?: number[] | null;
+  signature_words?: [string, number, number][] | null;
+  exclusive_words?: [string, number][] | null;
+  percentiles?: Record<string, number | null> | null;
+  lang_mix?: Record<string, number>;
 };
 
 export type ArtistPayload = {

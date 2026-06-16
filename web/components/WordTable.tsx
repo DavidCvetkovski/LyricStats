@@ -8,10 +8,12 @@ export function WordTable({
   title,
   rows,
   max = 10,
+  motifWord,
 }: {
   title: string;
   rows: Entry[];
   max?: number;
+  motifWord?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const top = rows[0]?.[1] ?? 1;
@@ -20,7 +22,7 @@ export function WordTable({
     <section>
       <header className="mb-4 flex items-baseline justify-between">
         <h3 className="display text-2xl sm:text-3xl">{title}</h3>
-        <span className="smallcaps">{rows.length} words</span>
+        <span className="smallcaps text-ink-mute opacity-0 select-none pointer-events-none">{rows.length} words</span>
       </header>
       <ol className="border-t border-rule-strong">
         {rows.map(([word, n], i) => {
@@ -43,19 +45,19 @@ export function WordTable({
               }}
               className="grid grid-cols-[2rem_1fr_auto] items-center gap-4 border-b border-rule overflow-hidden transition-all duration-500 ease-out"
             >
-              <span className="figure text-ink-mute text-base tabular-nums">
+              <span className="figure text-base tabular-nums text-ink-mute">
                 {String(i + 1).padStart(2, "0")}
               </span>
               <span className="relative">
                 <span
-                  className="font-serif text-xl text-ink"
+                  className={`font-serif text-xl ${word === motifWord ? "text-[#B4995F] italic font-medium" : "text-ink"}`}
                   style={{ fontFamily: "var(--font-serif), Georgia, serif" }}
                 >
                   {word}
                 </span>
                 <span
                   aria-hidden
-                  className="block absolute -bottom-0.5 left-0 h-px bg-accent"
+                  className={`block absolute -bottom-0.5 left-0 h-px ${word === motifWord ? "bg-[#B4995F]" : "bg-accent"}`}
                   style={{ width: `${(n / top) * 100}%`, opacity: 0.3 }}
                 />
               </span>
