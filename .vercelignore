@@ -1,17 +1,17 @@
-# Keep the API function bundle small and prevent Vercel from picking up the
-# Next.js frontend (that ships as a separate Vercel project rooted at web/).
-web/
+.tmp/
+.git/
 .venv/
-data/
-tests/
-pages/
-streamlit_app.py
+__pycache__/
+*.pyc
+*.pyo
 .pytest_cache/
-.github/
-Dockerfile
-.dockerignore
-# Hide the uv/pyproject metadata so Vercel's Python builder installs the slim
-# requirements.txt (with psycopg) instead of the full local dependency set.
-pyproject.toml
-uv.lock
+.ruff_cache/
+.env*
 *.db
+*.db-journal
+data/
+.DS_Store
+web/node_modules/
+web/.next/
+web/out/
+web/.turbo/
