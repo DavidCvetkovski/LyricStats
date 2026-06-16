@@ -340,6 +340,14 @@ def artist_pool(
     cached_valid = [s for s in cached_songs if s.lyrics and s.lyrics.strip()]
     agg = db.get_artist_aggregate(name)
 
+    if not fresh and agg:
+        return {
+            "name": agg.display_name,
+            "genius_url": existing.genius_url if existing else None,
+            "to_fetch": [],
+            "cached_total": agg.song_count,
+        }
+
     merged_count = _get_merged_song_count(agg, existing)
 
     # 1. We fast-return if we ALREADY have enough songs (dataset + cache) to satisfy
@@ -458,12 +466,15 @@ def artist(
     songs and live-cached songs.
     """
     agg = db.get_artist_aggregate(name)
+    if agg:
+        return _dataset_payload(agg)
+
     lb = db.get_artist(name)
 
-    if not agg and not lb:
+    if not lb:
         raise HTTPException(status_code=404, detail=f"No cached data for '{name}'.")
 
-    display_name = agg.display_name if agg else (lb.name if lb else name)
+    display_name = lb.name
     genius_url = lb.genius_url if lb else None
 
     # 1. Parse dataset songs

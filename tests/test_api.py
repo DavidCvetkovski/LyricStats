@@ -83,7 +83,7 @@ def test_artist_prefers_richer_dataset_over_thin_cache(temp_db):
     _add_lyrics_artist("Drake", 1)  # a stray cached song must not shadow
     out = main.artist(name="Drake", min=500)
     assert out["source"] == "dataset"
-    assert out["stats"]["song_count"] == 101
+    assert out["stats"]["song_count"] == 100
 
 
 def test_artist_limited_when_under_floor(temp_db):
