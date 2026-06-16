@@ -55,7 +55,7 @@ def main() -> None:
 
     # Read every local aggregate as plain dicts (detached from the session).
     with Session(db._engine) as ls:
-        rows = ls.exec(select(db.ArtistAggregate)).all()
+        rows = ls.exec(select(db.ArtistAggregate).where(db.ArtistAggregate.song_count >= 25)).all()
         payload = []
         import json
 

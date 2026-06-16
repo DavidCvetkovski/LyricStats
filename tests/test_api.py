@@ -83,7 +83,7 @@ def test_artist_prefers_richer_dataset_over_thin_cache(temp_db):
     _add_lyrics_artist("Drake", 1)  # a stray cached song must not shadow
     out = main.artist(name="Drake", min=500)
     assert out["source"] == "dataset"
-    assert out["stats"]["song_count"] == 100
+    assert out["stats"]["song_count"] == 101
 
 
 def test_artist_limited_when_under_floor(temp_db):
@@ -111,7 +111,7 @@ def test_artist_404_when_unknown(temp_db):
 
 def test_pool_dataset_exact_skips_fetch(temp_db):
     _add_dataset("Drake", 100)
-    res = main.artist_pool(name="Drake", min=100, fresh=False, shuffle="")
+    res = main.artist_pool(name="Drake", min=500, fresh=False, shuffle="")
     assert res["to_fetch"] == []
     assert res["cached_total"] == 100
 

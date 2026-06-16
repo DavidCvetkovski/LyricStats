@@ -440,7 +440,17 @@ def _dedupe_songs(rows: list[dict], toks: list[Counter]) -> list[int]:
             best[root] = i
             
     for root, best_i in best.items():
-        shortest_title = min([rows[i]["title"] for i in range(len(rows)) if find(i) == root], key=len)
+        candidates = [rows[i]["title"] for i in range(len(rows)) if find(i) == root]
+        candidates = [t for t in candidates if t.strip()]
+        if not candidates:
+            shortest_title = rows[best_i]["title"] or ""
+        else:
+            def title_score(title):
+                score = -len(title)
+                if re.search(r'[a-z][A-Z]', title):
+                    score -= 100
+                return score
+            shortest_title = max(candidates, key=title_score)
         rows[best_i]["title"] = shortest_title
         
     return sorted(best.values())
@@ -476,6 +486,7 @@ def fold_artist(rows: list[dict], *, min_songs: int, clf,
     import re
     def clean_title(title):
         if not title: return ""
+        orig_title = title
         
         parts = title.split(" - ")
         if len(parts) > 1:
@@ -492,7 +503,7 @@ def fold_artist(rows: list[dict], *, min_songs: int, clf,
         title = re.sub(r'\([^)]*\)|\[[^\]]*\]', replacer, title)
         
         cleaned = title.strip()
-        return cleaned if cleaned else title
+        return cleaned if cleaned else orig_title
 
     rows = [dict(r) for r in rows
             if "\xef\xbf\xbd" not in r["artist"]
