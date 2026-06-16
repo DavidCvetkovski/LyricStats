@@ -30,9 +30,21 @@ _SUSPECT = re.compile(
 )
 
 ARTISTS = [
-    "Taylor Swift", "Drake", "Eminem", "Kanye West", "JAY-Z", "Kendrick Lamar",
-    "Ariana Grande", "Rihanna", "The Weeknd", "Coldplay", "Ed Sheeran",
-    "Lady Gaga", "Beyoncé", "BTS", "Lana Del Rey",
+    "Taylor Swift",
+    "Drake",
+    "Eminem",
+    "Kanye West",
+    "JAY-Z",
+    "Kendrick Lamar",
+    "Ariana Grande",
+    "Rihanna",
+    "The Weeknd",
+    "Coldplay",
+    "Ed Sheeran",
+    "Lady Gaga",
+    "Beyoncé",
+    "BTS",
+    "Lana Del Rey",
 ]
 
 
@@ -46,10 +58,10 @@ def check(name: str) -> None:
     # songs_json rows: [title, year, wc, uniq, ttr, chorus, rep, has_sec]
     suspects = [s for s in songs if _SUSPECT.search(s[0] or "")]
     longest = stats.get("longest_song", {})
-    print(f"\n### {agg.display_name}: {agg.song_count} songs · "
-          f"{len(suspects)} suspect titles")
-    print(f"   longest-song highlight: {longest.get('title','?')!r} "
-          f"({longest.get('words','?')}w)")
+    print(f"\n### {agg.display_name}: {agg.song_count} songs · {len(suspects)} suspect titles")
+    print(
+        f"   longest-song highlight: {longest.get('title', '?')!r} ({longest.get('words', '?')}w)"
+    )
     print("   top 6 by words:")
     for t, yr, wc, *_ in sorted(songs, key=lambda x: x[2], reverse=True)[:6]:
         mark = "⚠" if _SUSPECT.search(t or "") else " "

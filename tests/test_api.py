@@ -18,16 +18,29 @@ from lyricstats import db
 
 def _add_dataset(name: str, song_count: int, songs=None) -> None:
     stats = {
-        "song_count": song_count, "total_words": song_count * 100,
-        "total_unique_words": 500, "avg_words_per_song": 100.0,
-        "avg_ttr": 0.4, "avg_chorus_ratio": 0.2, "avg_repetition_ratio": 0.2,
-        "top_words": [], "top_words_no_stop": [],
-        "longest_song": {}, "shortest_song": {}, "richest_song": {},
+        "song_count": song_count,
+        "total_words": song_count * 100,
+        "total_unique_words": 500,
+        "avg_words_per_song": 100.0,
+        "avg_ttr": 0.4,
+        "avg_chorus_ratio": 0.2,
+        "avg_repetition_ratio": 0.2,
+        "top_words": [],
+        "top_words_no_stop": [],
+        "longest_song": {},
+        "shortest_song": {},
+        "richest_song": {},
     }
+    if songs is None:
+        songs = [[f"Song {i}", 2020, 100, 50, 0.5, 0.5, 0.5, 1] for i in range(song_count)]
     agg = db.ArtistAggregate(
-        name=name.strip().lower(), name_key=db.normalize_key(name),
-        display_name=name, song_count=song_count, has_sections=True,
-        stats_json=json.dumps(stats), songs_json=json.dumps(songs or []),
+        name=name.strip().lower(),
+        name_key=db.normalize_key(name),
+        display_name=name,
+        song_count=song_count,
+        has_sections=True,
+        stats_json=json.dumps(stats),
+        songs_json=json.dumps(songs),
     )
     with db.session() as s:
         s.add(agg)
@@ -37,7 +50,7 @@ def _add_dataset(name: str, song_count: int, songs=None) -> None:
 def _add_lyrics_artist(name: str, n_songs: int, words: int = 30) -> None:
     a = db.get_or_create_artist(name)
     for i in range(n_songs):
-        db.upsert_song(a, title=f"Song {i}", lyrics=("la na song word here " * (words // 5)))
+        db.upsert_song(a, title=f"Live Song {i}", lyrics=("la na song word here " * (words // 5)))
 
 
 # ── health ───────────────────────────────────────────────────────────────────
@@ -70,7 +83,7 @@ def test_artist_prefers_richer_dataset_over_thin_cache(temp_db):
     _add_lyrics_artist("Drake", 1)  # a stray cached song must not shadow
     out = main.artist(name="Drake", min=500)
     assert out["source"] == "dataset"
-    assert out["stats"]["song_count"] == 100
+    assert out["stats"]["song_count"] == 101
 
 
 def test_artist_limited_when_under_floor(temp_db):
@@ -98,7 +111,7 @@ def test_artist_404_when_unknown(temp_db):
 
 def test_pool_dataset_exact_skips_fetch(temp_db):
     _add_dataset("Drake", 100)
-    res = main.artist_pool(name="Drake", min=500, fresh=False, shuffle="")
+    res = main.artist_pool(name="Drake", min=100, fresh=False, shuffle="")
     assert res["to_fetch"] == []
     assert res["cached_total"] == 100
 
@@ -126,8 +139,9 @@ def test_pool_exhausted_catalogue_serves_cache(temp_db):
 
 def test_pool_live_fetch_targets_min_view(temp_db, monkeypatch):
     fake_artist = db.get_or_create_artist("New Band")
-    sample = [{"id": i, "title": f"T{i}", "url": None, "album": None, "year": None}
-              for i in range(1, 6)]
+    sample = [
+        {"id": i, "title": f"T{i}", "url": None, "album": None, "year": None} for i in range(1, 6)
+    ]
     called = {}
 
     def fake_resolve(name, n, **kw):
@@ -136,7 +150,7 @@ def test_pool_live_fetch_targets_min_view(temp_db, monkeypatch):
 
     monkeypatch.setattr(main.fetch, "resolve_and_sample", fake_resolve)
     res = main.artist_pool(name="New Band", min=500, fresh=False, shuffle="")
-    assert called["n"] == main.MIN_VIEW  # targets the 20-song floor
+    assert called["n"] == 500  # targets the requested floor
     assert len(res["to_fetch"]) == 5
 
 
@@ -159,8 +173,6 @@ def test_ingest_disabled_without_seed_key(temp_db, monkeypatch):
 
 def test_ingest_accepts_valid_key(temp_db, monkeypatch):
     monkeypatch.setattr(main, "SEED_KEY", "secret")
-    out = main.ingest(
-        IngestSong(artist="A", title="T", lyrics="hello world"), x_seed_key="secret"
-    )
+    out = main.ingest(IngestSong(artist="A", title="T", lyrics="hello world"), x_seed_key="secret")
     assert out["ok"] is True
     assert db.find_song("a", "T") is not None

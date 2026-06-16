@@ -89,22 +89,58 @@ _NON_SONG_SUBSTR = (
 # script/interview/full-album-text that slipped the title filter.
 MAX_SONG_WORDS = 2000
 
+import re
 
-def is_non_song(title: str, word_count: int = 0, *, clf=None) -> bool:
+# Aggressive Junk Filters
+AGGRESSIVE_JUNK_REGEX = re.compile(
+    r"(\(live\)|\[live\]|live from|\bvoice memo\b|\bcommentary\b|\btour\b|\bbehind the scenes\b|\binterview\b|\bmaking of\b|\bdemo\b|\bkaraoke\b|\btribute\b|\bprologue\b|\bpaused\b|\bpiano/vocal\b|\bchart history\b|\bforeword\b|\bperformance\b| / .* / )", 
+    re.IGNORECASE
+)
+
+# Avoid dropping real songs with these words in their title
+EXCEPTION_REGEX = re.compile(
+    r"(Long Live|Live Forever|Live for the Little Things)",
+    re.IGNORECASE
+)
+
+def is_english_toks(cnt: Counter) -> bool:
+    total = sum(cnt.values())
+    if total == 0: return False
+    eng_markers = sum(cnt.get(w, 0) for w in ["the", "and", "to", "of", "a", "i", "you", "it", "in", "my", "is", "that"])
+    return (eng_markers / total) > 0.1
+
+
+def is_non_song(title: str, word_count: int = 0, ttr: float = 0.0, cnt: Counter = None, *, clf=None) -> bool:
     """Three layers, in order of cost: a real-song-type guard, a deterministic
     blocklist (substrings + length cap), then the optional fastText title
     classifier. ``clf`` may be None (no model present) — the blocklist still
     runs, so the fold degrades gracefully without fasttext."""
     t = (title or "").lower()
+    
     # Never drop a freestyle / interlude / skit, whatever else the title says.
     if _SONG_GUARD_RE.search(t):
         return False
+        
+    if word_count > 0 and word_count < 60:
+        return True
+        
     if word_count and word_count > MAX_SONG_WORDS:
         return True
+        
     if any(p in t for p in _NON_SONG_SUBSTR):
         return True
+        
+    if EXCEPTION_REGEX.search(t) and not re.search(r'(Live/2011|Live 2011|New Years Day)', t, re.IGNORECASE):
+        pass # keep
+    elif AGGRESSIVE_JUNK_REGEX.search(t):
+        return True
+        
+    if ttr > 0.65 and cnt is not None and is_english_toks(cnt):
+        return True
+        
     if clf is not None and clf.is_junk(title):
         return True
+        
     return False
 
 
@@ -277,6 +313,31 @@ def _highlights(songs: list[tuple[str, int, float]]) -> dict:
     }
 
 
+def _dedupe_by_canonical(rows: list) -> list:
+    try:
+        from import_lrclib import canonical_title
+    except ImportError:
+        # Fallback if import fails
+        def canonical_title(t, a): return t.lower().strip()
+        
+    best = {}
+    for r in rows:
+        tk = canonical_title(r["title"], r["artist"])
+        if tk not in best:
+            best[tk] = r
+        else:
+            # Keep the shortest title for display, but keep the richest song stats
+            shortest_title = min(r["title"], best[tk]["title"], key=len)
+            
+            if r["wc"] > best[tk]["wc"]:
+                r["title"] = shortest_title
+                best[tk] = r
+            else:
+                best[tk]["title"] = shortest_title
+                
+    return list(best.values())
+
+
 def _build_aggregate(rows: list, *, min_songs: int, top_n: int, clf=None):
     """Build an ArtistAggregate ORM object for one artist group, or None if too
     few songs. Rows are grouped by normalised (trim+lower) name, so casing
@@ -285,7 +346,11 @@ def _build_aggregate(rows: list, *, min_songs: int, top_n: int, clf=None):
     # Drop non-songs (interviews, liner notes, tour merch, translations, …) via
     # blocklist + length cap + the fastText title classifier, before anything
     # counts toward stats, highlights, or the catalogue.
-    rows = [r for r in rows if not is_non_song(r["title"], r["wc"], clf=clf)]
+    rows = [dict(r) for r in rows if not is_non_song(r["title"], r["wc"], r["ttr"], decode_tokens(r["toks"]), clf=clf)]
+    
+    # Deduplicate variants (e.g. End Game vs End Game (feat...))
+    rows = _dedupe_by_canonical(rows)
+    
     n = len(rows)
     if n < min_songs:
         return None

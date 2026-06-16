@@ -84,9 +84,7 @@ def test_compute_apostrophes_preserve_contractions():
     # "don't", "ain't" should be single tokens, not split.
     s = stats.compute("don't ain't won't y'all")
     assert s.word_count == 4
-    assert "don't" in {w for w, _ in s.top_words} or "don’t" in {
-        w for w, _ in s.top_words
-    }
+    assert "don't" in {w for w, _ in s.top_words} or "don’t" in {w for w, _ in s.top_words}
 
 
 def test_compute_top_words_no_stop_does_not_overflow_when_few_content_words():
@@ -225,19 +223,20 @@ def test_artist_pool_target_count_at_least_20():
     fake_artist.total_songs = 6
 
     fake_cached_songs = [
-        MagicMock(id=1, title="Song 1", lyrics="hello world", genius_id=1),
-        MagicMock(id=2, title="Song 2", lyrics="", genius_id=2),
-        MagicMock(id=3, title="Song 3", lyrics="", genius_id=3),
-        MagicMock(id=4, title="Song 4", lyrics="", genius_id=4),
-        MagicMock(id=5, title="Song 5", lyrics="", genius_id=5),
-        MagicMock(id=6, title="Song 6", lyrics="", genius_id=6),
+        MagicMock(id=1, title="Song 1", lyrics="hello world", genius_id=1, stats_json=None),
+        MagicMock(id=2, title="Song 2", lyrics="", genius_id=2, stats_json=None),
+        MagicMock(id=3, title="Song 3", lyrics="", genius_id=3, stats_json=None),
+        MagicMock(id=4, title="Song 4", lyrics="", genius_id=4, stats_json=None),
+        MagicMock(id=5, title="Song 5", lyrics="", genius_id=5, stats_json=None),
+        MagicMock(id=6, title="Song 6", lyrics="", genius_id=6, stats_json=None),
     ]
 
-    with patch("lyricstats.db.get_artist", return_value=fake_artist), \
-         patch("lyricstats.db.list_songs", return_value=fake_cached_songs), \
-         patch("lyricstats.db.get_artist_aggregate", return_value=None), \
-         patch("lyricstats.db.suggest_artist_aggregates", return_value=[]):
-        
+    with (
+        patch("lyricstats.db.get_artist", return_value=fake_artist),
+        patch("lyricstats.db.list_songs", return_value=fake_cached_songs),
+        patch("lyricstats.db.get_artist_aggregate", return_value=None),
+        patch("lyricstats.db.suggest_artist_aggregates", return_value=[]),
+    ):
         res = artist_pool(name="karolina gocheva", min=500, shuffle="", fresh=False)
         assert res["to_fetch"] == []
         assert res["cached_total"] == 1
@@ -258,12 +257,12 @@ def test_artist_pool_target_count_not_enough_fetched():
     fake_artist.total_songs = 100
 
     fake_cached_songs = [
-        MagicMock(id=1, title="Song 1", lyrics="hello", genius_id=1),
-        MagicMock(id=2, title="Song 2", lyrics="", genius_id=2),
-        MagicMock(id=3, title="Song 3", lyrics="", genius_id=3),
-        MagicMock(id=4, title="Song 4", lyrics="", genius_id=4),
-        MagicMock(id=5, title="Song 5", lyrics="", genius_id=5),
-        MagicMock(id=6, title="Song 6", lyrics="", genius_id=6),
+        MagicMock(id=1, title="Song 1", lyrics="hello", genius_id=1, stats_json=None),
+        MagicMock(id=2, title="Song 2", lyrics="", genius_id=2, stats_json=None),
+        MagicMock(id=3, title="Song 3", lyrics="", genius_id=3, stats_json=None),
+        MagicMock(id=4, title="Song 4", lyrics="", genius_id=4, stats_json=None),
+        MagicMock(id=5, title="Song 5", lyrics="", genius_id=5, stats_json=None),
+        MagicMock(id=6, title="Song 6", lyrics="", genius_id=6, stats_json=None),
     ]
 
     sampled_songs = [
@@ -277,12 +276,13 @@ def test_artist_pool_target_count_not_enough_fetched():
         {"id": 8, "title": "Song 8"},
     ]
 
-    with patch("lyricstats.db.get_artist", return_value=fake_artist), \
-         patch("lyricstats.db.list_songs", return_value=fake_cached_songs), \
-         patch("lyricstats.db.get_artist_aggregate", return_value=None), \
-         patch("lyricstats.db.suggest_artist_aggregates", return_value=[]), \
-         patch("lyricstats.fetch.resolve_and_sample", return_value=(fake_artist, sampled_songs)):
-        
+    with (
+        patch("lyricstats.db.get_artist", return_value=fake_artist),
+        patch("lyricstats.db.list_songs", return_value=fake_cached_songs),
+        patch("lyricstats.db.get_artist_aggregate", return_value=None),
+        patch("lyricstats.db.suggest_artist_aggregates", return_value=[]),
+        patch("lyricstats.fetch.resolve_and_sample", return_value=(fake_artist, sampled_songs)),
+    ):
         res = artist_pool(name="test artist", min=500, shuffle="", fresh=False)
         assert res["to_fetch"] == [
             {"id": 7, "title": "Song 7"},

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+load_dotenv(".env.local")
 load_dotenv()
 
 
@@ -28,6 +29,12 @@ def _truthy(val: str | None, default: bool) -> bool:
 # Cloudflare 403s datacenter IPs, so we disable it on Vercel (GENIUS_SCRAPE=0)
 # and fall back to lrclib/lyrics.ovh there.
 GENIUS_SCRAPE: bool = _truthy(get("GENIUS_SCRAPE", "1"), default=True)
+
+# Whether to enable live fetching to sample new songs via the Genius API.
+LIVE_FETCH_ENABLED: bool = _truthy(get("LIVE_FETCH_ENABLED", "1"), default=True)
+
+# Whether to restrict lyric fetching to ONLY use lrclib (skipping Genius and ovh).
+ONLY_LRCLIB: bool = _truthy(get("ONLY_LRCLIB", "0"), default=False)
 
 # Shared secret guarding the /api/ingest endpoint used by the seed scripts to
 # push full-quality lyrics into the cloud database. Unset = endpoint disabled.

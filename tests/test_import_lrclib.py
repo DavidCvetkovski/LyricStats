@@ -29,19 +29,16 @@ def test_taylors_version_variants_merge():
 
 
 def test_dash_suffix_and_descriptor_merge():
-    assert imp.canonical_title("Love Story - Live at the BBC") == \
-        imp.canonical_title("Love Story")
-    assert imp.canonical_title("Halo (Remastered 2011)") == \
-        imp.canonical_title("Halo")
-    assert imp.canonical_title('"Change" music video') == \
-        imp.canonical_title("Change")
-    assert imp.canonical_title("Anti-Hero") == \
-        imp.canonical_title("Anti-Hero (Taylor's Version)")
+    assert imp.canonical_title("Love Story - Live at the BBC") == imp.canonical_title("Love Story")
+    assert imp.canonical_title("Halo (Remastered 2011)") == imp.canonical_title("Halo")
+    assert imp.canonical_title('"Change" music video') == imp.canonical_title("Change")
+    assert imp.canonical_title("Anti-Hero") == imp.canonical_title("Anti-Hero (Taylor's Version)")
 
 
 def test_leading_bracket_titles():
-    assert imp.canonical_title("(I Can't Get No) Satisfaction") == \
-        imp.canonical_title("Satisfaction")
+    assert imp.canonical_title("(I Can't Get No) Satisfaction") == imp.canonical_title(
+        "Satisfaction"
+    )
 
 
 def test_different_songs_stay_distinct():
@@ -52,10 +49,12 @@ def test_different_songs_stay_distinct():
 
 def test_artist_prefix_stripped_not_song():
     # "Taylor Swift - Bad Blood" must dedupe as the song, not the artist name.
-    assert imp.canonical_title("Taylor Swift - Bad Blood", "Taylor Swift") == \
-        imp.canonical_title("Bad Blood")
-    assert imp.canonical_title("Taylor Swift -  So High School", "Taylor Swift") == \
-        imp.canonical_title("So High School")
+    assert imp.canonical_title("Taylor Swift - Bad Blood", "Taylor Swift") == imp.canonical_title(
+        "Bad Blood"
+    )
+    assert imp.canonical_title(
+        "Taylor Swift -  So High School", "Taylor Swift"
+    ) == imp.canonical_title("So High School")
     # Distinct songs under the same artist prefix stay distinct.
     a = imp.canonical_title("Taylor Swift - Bad Blood", "Taylor Swift")
     b = imp.canonical_title("Taylor Swift - So High School", "Taylor Swift")
@@ -64,13 +63,14 @@ def test_artist_prefix_stripped_not_song():
 
 def test_bare_dash_not_a_descriptor_kept():
     # No descriptor word in the tail → not a variant, keep both sides distinct.
-    assert imp.canonical_title("Marry The Night - John") != \
-        imp.canonical_title("Marry The Night")
+    assert imp.canonical_title("Marry The Night - John") != imp.canonical_title("Marry The Night")
     # Descriptor in the tail → variant, strip it.
-    assert imp.canonical_title("Love Story - Digital Dog Remix") == \
-        imp.canonical_title("Love Story")
-    assert imp.canonical_title("Shake It Off - Live at the BBC") == \
-        imp.canonical_title("Shake It Off")
+    assert imp.canonical_title("Love Story - Digital Dog Remix") == imp.canonical_title(
+        "Love Story"
+    )
+    assert imp.canonical_title("Shake It Off - Live at the BBC") == imp.canonical_title(
+        "Shake It Off"
+    )
 
 
 def test_descriptor_only_titles_keep_a_key():
@@ -104,16 +104,20 @@ def test_content_fingerprint_ignores_order_and_rare_words():
 
 
 def _row(title, wc, toks, synced=0):
-    return {"title": title, "artist": "Taylor Swift", "wc": wc,
-            "has_synced": synced, "toks": ""}, Counter(toks.split())
+    return {
+        "title": title,
+        "artist": "Taylor Swift",
+        "wc": wc,
+        "has_synced": synced,
+        "toks": "",
+    }, Counter(toks.split())
 
 
 def test_dedupe_merges_title_typo_via_content():
     # Same lyrics, one title is a typo → must collapse to one song.
     lyr = "you re on your own kid grew up fast"
     rows, toks = [], []
-    for title in ["You're On Your Own Kid", "05 You're On Your Own Kid",
-                  "You Re Own Your Own Kid"]:
+    for title in ["You're On Your Own Kid", "05 You're On Your Own Kid", "You Re Own Your Own Kid"]:
         r, c = _row(title, 40, lyr)
         rows.append(r)
         toks.append(c)
@@ -123,9 +127,11 @@ def test_dedupe_merges_title_typo_via_content():
 
 def test_dedupe_keeps_distinct_songs():
     rows, toks = [], []
-    for title, lyr in [("Love Story", "romeo juliet baby marry castle"),
-                       ("Bad Blood", "band aids bullet holes mad scars"),
-                       ("Style", "midnights james dean daydream tshirt")]:
+    for title, lyr in [
+        ("Love Story", "romeo juliet baby marry castle"),
+        ("Bad Blood", "band aids bullet holes mad scars"),
+        ("Style", "midnights james dean daydream tshirt"),
+    ]:
         r, c = _row(title, 40, lyr)
         rows.append(r)
         toks.append(c)
@@ -167,12 +173,14 @@ def test_small_ratio_survives():
 
 
 def test_parse_synced_basics():
-    lrc = "\n".join([
-        "[00:10.00] one two three",
-        "[00:12.00] four five",
-        "[00:20.00] six",
-        "[00:50.00] seven eight nine ten",
-    ])
+    lrc = "\n".join(
+        [
+            "[00:10.00] one two three",
+            "[00:12.00] four five",
+            "[00:20.00] six",
+            "[00:50.00] seven eight nine ten",
+        ]
+    )
     out = imp.parse_synced(lrc, 60.0)
     assert out["first"] == 10.0
     assert out["gap"] == 30.0
@@ -192,7 +200,7 @@ def test_backfill_years():
             return MockCursor()
 
     songs_list = [
-        ["\"Slut!\" (Taylor's Version)", None, 100, 50, 0.5, 0.0, 0.2, 0],
+        ['"Slut!" (Taylor\'s Version)', None, 100, 50, 0.5, 0.0, 0.2, 0],
         ["Style - Remix", None, 120, 60, 0.5, 0.0, 0.2, 0],
         ["Shake It Off", None, 150, 70, 0.4, 0.0, 0.3, 0],
     ]
@@ -202,4 +210,3 @@ def test_backfill_years():
     assert songs_list[1][1] == 2014
     assert songs_list[2][1] is None
     assert stats["years_known"] == 2
-

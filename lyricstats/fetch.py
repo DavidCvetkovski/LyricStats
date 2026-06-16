@@ -28,7 +28,7 @@ import requests
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from . import db
-from .config import GENIUS_SCRAPE, GENIUS_TOKEN
+from .config import GENIUS_SCRAPE, GENIUS_TOKEN, ONLY_LRCLIB
 
 log = logging.getLogger(__name__)
 
@@ -403,6 +403,12 @@ def get_lyrics(
     Order: Genius scrape (if allowed) → lrclib → lyrics.ovh.
     `source` is one of "genius" | "lrclib" | "ovh" | "none".
     """
+    if ONLY_LRCLIB:
+        ly, album = _lrclib_lyrics(artist, title)
+        if ly:
+            return ly, "lrclib", album
+        return None, "none", None
+
     if allow_scrape is None:
         allow_scrape = GENIUS_SCRAPE
 
@@ -484,8 +490,12 @@ def fetch_song(artist: str, title: str, *, force: bool = False) -> FetchedSong:
         genius_id=song_id,
     )
     return FetchedSong(
-        artist=a.name, title=row.title, lyrics=row.lyrics,
-        source=source, album=row.album, year=row.year,
+        artist=a.name,
+        title=row.title,
+        lyrics=row.lyrics,
+        source=source,
+        album=row.album,
+        year=row.year,
     )
 
 
@@ -543,7 +553,9 @@ def fetch_one_by_id(
     if song_id:
         with db.session() as s:
             existing = s.exec(
-                db.select(db.Song).where(db.Song.artist_id == artist.id, db.Song.genius_id == song_id)
+                db.select(db.Song).where(
+                    db.Song.artist_id == artist.id, db.Song.genius_id == song_id
+                )
             ).first()
             if existing:
                 return True
@@ -559,9 +571,7 @@ def fetch_one_by_id(
                     s.commit()
         return True
 
-    lyrics, _source, src_album = get_lyrics(
-        artist.name, title, song_url=song_url, song_id=song_id
-    )
+    lyrics, _source, src_album = get_lyrics(artist.name, title, song_url=song_url, song_id=song_id)
     # Save empty lyrics to mark as attempted so we don't repeat the fetch
     if not lyrics:
         lyrics = ""

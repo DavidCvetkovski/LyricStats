@@ -17,20 +17,159 @@ from .text import all_lines, char_count, parse_sections, tokenize
 # Kept short on purpose: top-words still surface real content if you remove these.
 STOPWORDS: set[str] = {
     # English
-    "the", "a", "an", "and", "or", "but", "if", "of", "to", "in", "on", "at", "by", "for",
-    "with", "as", "is", "are", "was", "were", "be", "been", "being", "i", "you", "he", "she",
-    "it", "we", "they", "me", "him", "her", "us", "them", "my", "your", "his", "its", "our",
-    "their", "this", "that", "these", "those", "so", "do", "don", "t", "s", "m", "re", "ve",
-    "ll", "d", "yeah", "oh", "uh", "yo", "ay", "hey", "na", "la",
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "but",
+    "if",
+    "of",
+    "to",
+    "in",
+    "on",
+    "at",
+    "by",
+    "for",
+    "with",
+    "as",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "being",
+    "i",
+    "you",
+    "he",
+    "she",
+    "it",
+    "we",
+    "they",
+    "me",
+    "him",
+    "her",
+    "us",
+    "them",
+    "my",
+    "your",
+    "his",
+    "its",
+    "our",
+    "their",
+    "this",
+    "that",
+    "these",
+    "those",
+    "so",
+    "do",
+    "don",
+    "t",
+    "s",
+    "m",
+    "re",
+    "ve",
+    "ll",
+    "d",
+    "yeah",
+    "oh",
+    "uh",
+    "yo",
+    "ay",
+    "hey",
+    "na",
+    "la",
     # BHS (bosnian/serbian/croatian)
-    "i", "u", "na", "se", "je", "su", "te", "to", "ti", "ja", "mi", "vi", "on", "ona", "ono",
-    "oni", "one", "moj", "tvoj", "njegov", "njen", "naš", "vaš", "njihov", "što", "šta", "ko",
-    "ali", "ili", "pa", "da", "ne", "nije", "neka", "ako", "kao", "samo", "sad", "još", "već",
-    "sve", "svi", "kad", "tad", "tu", "tamo", "ovde", "ovo", "ono", "taj", "ova", "onaj",
-    "bez", "od", "do", "za", "po", "iz", "kroz", "uz", "niz", "pred", "pod", "nad", "među",
-    "bih", "bi", "bismo", "biste", "ću", "ćeš", "će", "ćemo", "ćete",
-    "jer", "biti", "samo", "jako", "si", "sam", "smo", "ste", "kô", "k'o", "ko",
-    "već", "još", "li", "nek",
+    "i",
+    "u",
+    "na",
+    "se",
+    "je",
+    "su",
+    "te",
+    "to",
+    "ti",
+    "ja",
+    "mi",
+    "vi",
+    "on",
+    "ona",
+    "ono",
+    "oni",
+    "one",
+    "moj",
+    "tvoj",
+    "njegov",
+    "njen",
+    "naš",
+    "vaš",
+    "njihov",
+    "što",
+    "šta",
+    "ko",
+    "ali",
+    "ili",
+    "pa",
+    "da",
+    "ne",
+    "nije",
+    "neka",
+    "ako",
+    "kao",
+    "samo",
+    "sad",
+    "još",
+    "već",
+    "sve",
+    "svi",
+    "kad",
+    "tad",
+    "tu",
+    "tamo",
+    "ovde",
+    "ovo",
+    "ono",
+    "taj",
+    "ova",
+    "onaj",
+    "bez",
+    "od",
+    "do",
+    "za",
+    "po",
+    "iz",
+    "kroz",
+    "uz",
+    "niz",
+    "pred",
+    "pod",
+    "nad",
+    "među",
+    "bih",
+    "bi",
+    "bismo",
+    "biste",
+    "ću",
+    "ćeš",
+    "će",
+    "ćemo",
+    "ćete",
+    "jer",
+    "biti",
+    "samo",
+    "jako",
+    "si",
+    "sam",
+    "smo",
+    "ste",
+    "kô",
+    "k'o",
+    "ko",
+    "već",
+    "još",
+    "li",
+    "nek",
 }
 
 
@@ -45,7 +184,7 @@ class SongStats:
     # vocabulary
     unique_words: int = 0
     type_token_ratio: float = 0.0  # unique / total
-    hapax_count: int = 0           # words used exactly once
+    hapax_count: int = 0  # words used exactly once
     hapax_ratio: float = 0.0
 
     # word length
@@ -64,7 +203,9 @@ class SongStats:
 
     # structure
     section_kinds: dict[str, int] = field(default_factory=dict)
-    section_sequence: list[str] = field(default_factory=list)  # order, e.g. ["intro","verse","chorus","verse","chorus"]
+    section_sequence: list[str] = field(
+        default_factory=list
+    )  # order, e.g. ["intro","verse","chorus","verse","chorus"]
     chorus_ratio: float = 0.0  # share of total lines that live in chorus sections
 
     # repetition
@@ -200,9 +341,7 @@ def aggregate(songs_with_lyrics: list[tuple[str, str]], *, top_n: int = 30) -> A
     out.total_unique_words = len(vocab)
     out.avg_words_per_song = round(out.total_words / out.song_count, 2)
     out.avg_ttr = round(sum(s.type_token_ratio for _, s in per_song) / out.song_count, 4)
-    out.avg_chorus_ratio = round(
-        sum(s.chorus_ratio for _, s in per_song) / out.song_count, 4
-    )
+    out.avg_chorus_ratio = round(sum(s.chorus_ratio for _, s in per_song) / out.song_count, 4)
     out.avg_repetition_ratio = round(
         sum(s.repetition_ratio for _, s in per_song) / out.song_count, 4
     )
@@ -213,10 +352,23 @@ def aggregate(songs_with_lyrics: list[tuple[str, str]], *, top_n: int = 30) -> A
 
     # Filter out short songs/demos/snippets from highlights to avoid skewing stats (e.g. 21-word demos winning widest vocabulary)
     highlights_eligible = [
-        (title, s) for title, s in per_song
-        if s.word_count >= 80 and not any(
+        (title, s)
+        for title, s in per_song
+        if s.word_count >= 80
+        and not any(
             kw in title.lower()
-            for kw in ["(demo)", "[demo]", "(snippet)", "[snippet]", "(teaser)", "[teaser]", "(promo)", "[promo]", "(skit)", "[skit]"]
+            for kw in [
+                "(demo)",
+                "[demo]",
+                "(snippet)",
+                "[snippet]",
+                "(teaser)",
+                "[teaser]",
+                "(promo)",
+                "[promo]",
+                "(skit)",
+                "[skit]",
+            ]
         )
     ]
     if not highlights_eligible:

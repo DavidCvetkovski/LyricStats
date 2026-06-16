@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from sqlmodel import Session, create_engine, select
 from lyricstats import db
+
 
 def main():
     # Read production DATABASE_URL from .env.local
@@ -21,9 +25,9 @@ def main():
 
     # Normalise Postgres URL to use psycopg driver
     if prod_url.startswith("postgres://"):
-        prod_url = "postgresql+psycopg://" + prod_url[len("postgres://"):]
+        prod_url = "postgresql+psycopg://" + prod_url[len("postgres://") :]
     elif prod_url.startswith("postgresql://"):
-        prod_url = "postgresql+psycopg://" + prod_url[len("postgresql://"):]
+        prod_url = "postgresql+psycopg://" + prod_url[len("postgresql://") :]
 
     print("Connecting to production database...")
     try:
@@ -42,7 +46,7 @@ def main():
     with Session(prod_engine) as prod_session, Session(local_engine) as local_session:
         # Get all artists from prod
         prod_artists = prod_session.exec(select(db.Artist)).all()
-        artist_map = {} # maps prod artist ID to local artist object
+        artist_map = {}  # maps prod artist ID to local artist object
         for pa in prod_artists:
             # Check if artist exists locally
             la = local_session.exec(select(db.Artist).where(db.Artist.name == pa.name)).first()
@@ -53,7 +57,7 @@ def main():
                     genius_url=pa.genius_url,
                     fetched_at=pa.fetched_at,
                     catalogue_fetched_at=pa.catalogue_fetched_at,
-                    total_songs=pa.total_songs
+                    total_songs=pa.total_songs,
                 )
                 local_session.add(la)
                 local_session.commit()
@@ -78,7 +82,7 @@ def main():
             la = artist_map.get(ps.artist_id)
             if not la:
                 continue
-            
+
             # Check if song exists locally under this artist
             ls = local_session.exec(
                 select(db.Song).where(db.Song.artist_id == la.id, db.Song.title == ps.title)
@@ -92,7 +96,7 @@ def main():
                     genius_id=ps.genius_id,
                     lyrics=ps.lyrics,
                     stats_json=ps.stats_json,
-                    fetched_at=ps.fetched_at
+                    fetched_at=ps.fetched_at,
                 )
                 local_session.add(ls)
                 synced_songs += 1
@@ -114,6 +118,7 @@ def main():
 
         local_session.commit()
         print(f"Sync complete! Synced {synced_songs} songs.")
+
 
 if __name__ == "__main__":
     main()

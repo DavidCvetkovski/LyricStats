@@ -60,42 +60,83 @@ MODEL_PATH = "./data/title_clf.bin"
 # the existing import blocklist recover recall.
 _JUNK_PATTERNS = [
     # interviews / behind-the-scenes / meta
-    r"\binterview\b", r"\bthe making of\b", r"\bmaking of\b", r"\bbehind the scenes\b",
-    r"\bin conversation\b", r"\bannotat", r"\bdirectors? commentary\b",
-    r"\breacts? to\b", r"\bresponds? to\b", r"\bconference call\b",
+    r"\binterview\b",
+    r"\bthe making of\b",
+    r"\bmaking of\b",
+    r"\bbehind the scenes\b",
+    r"\bin conversation\b",
+    r"\bannotat",
+    r"\bdirectors? commentary\b",
+    r"\breacts? to\b",
+    r"\bresponds? to\b",
+    r"\bconference call\b",
     # award shows (conservative — avoid Spanish "amas", "Grammy Family", "Oscar")
-    r"\bvmas?\b", r"\bbet awards?\b", r"\bamerican music awards\b", r"\boscars\b",
-    r"\bsuper ?bowl\b", r"\bhalftime\b", r"\bbillboard music awards?\b",
-    r"\bmtv (video|movie) awards?\b", r"\bacademy of country\b", r"\biheartradio\b",
-    r"\bartist of the (decade|year|month)\b", r"\bgrammy awards?\b",
-    r"\blatin grammys?\b", r"\bacceptance speech\b", r"\bvictory speech\b",
+    r"\bvmas?\b",
+    r"\bbet awards?\b",
+    r"\bamerican music awards\b",
+    r"\boscars\b",
+    r"\bsuper ?bowl\b",
+    r"\bhalftime\b",
+    r"\bbillboard music awards?\b",
+    r"\bmtv (video|movie) awards?\b",
+    r"\bacademy of country\b",
+    r"\biheartradio\b",
+    r"\bartist of the (decade|year|month)\b",
+    r"\bgrammy awards?\b",
+    r"\blatin grammys?\b",
+    r"\bacceptance speech\b",
+    r"\bvictory speech\b",
     r"\baward acceptance\b",
     # tour merch / setlists (require 'tour' context so real 'guests'/'costumes'
     # songs survive)
     r"\btour (costumes?|book|guide|dates?|rehearsals?|diary|programme?|setlist|special guests?|intro)\b",
     r"\bsetlist\b",
     # book / liner prose
-    r"\bforeword\b", r"\bprologue\b", r"\bepilogue\b", r"\bpreface\b",
-    r"\bliner notes\b", r"\bbooklet\b",
+    r"\bforeword\b",
+    r"\bprologue\b",
+    r"\bepilogue\b",
+    r"\bpreface\b",
+    r"\bliner notes\b",
+    r"\bbooklet\b",
     # lists / catalogue meta
-    r"\bplaylist\b", r"\bchart history\b", r"\bdiscography\b", r"\btracklist",
+    r"\bplaylist\b",
+    r"\bchart history\b",
+    r"\bdiscography\b",
+    r"\btracklist",
     r"\bgreatest hits\b",
     # social posts (require an action noun; bare 'instagram' is a real song)
     r"\binstagram (post|story|stories|live|caption|rant|feed)\b",
-    r"\bfacebook post\b", r"\btwitter (rant|thread)\b", r"\btweetstorm\b",
-    r"\ba message from\b", r"\bmessage from\b",
+    r"\bfacebook post\b",
+    r"\btwitter (rant|thread)\b",
+    r"\btweetstorm\b",
+    r"\ba message from\b",
+    r"\bmessage from\b",
     # speeches / scripts / transcripts
-    r"\bcommencement\b", r"\bted talk\b", r"\bkeynote\b", r"\bscreenplay\b",
-    r"\bfilm script\b", r"\bmovie script\b", r"\btranscript\b",
+    r"\bcommencement\b",
+    r"\bted talk\b",
+    r"\bkeynote\b",
+    r"\bscreenplay\b",
+    r"\bfilm script\b",
+    r"\bmovie script\b",
+    r"\btranscript\b",
     # art / film / press
-    r"\bdocumentary\b", r"\balbum art\b", r"\bcover art\b",
-    r"\bpress (release|conference)\b", r"\bofficial statement\b",
+    r"\bdocumentary\b",
+    r"\balbum art\b",
+    r"\bcover art\b",
+    r"\bpress (release|conference)\b",
+    r"\bofficial statement\b",
     # translations / romanizations (not the artist's own writing)
-    r"\btraducci[óo]n\b", r"\btradu[çc][ãa]o\b", r"\bt[üu]rk[çc]e\b",
-    r"\b[çc]eviri\b", r"\bs[öo]zleri\b", r"\bromaniz", r"\b[üu]bersetzung\b",
+    r"\btraducci[óo]n\b",
+    r"\btradu[çc][ãa]o\b",
+    r"\bt[üu]rk[çc]e\b",
+    r"\b[çc]eviri\b",
+    r"\bs[öo]zleri\b",
+    r"\bromaniz",
+    r"\b[üu]bersetzung\b",
     r"\bperevod\b",
 ]
 _JUNK_RE = re.compile("|".join(_JUNK_PATTERNS), re.IGNORECASE)
+
 
 def weak_label(title: str) -> int | None:
     """1=song, 0=non-song, None=skip (don't train on it). Title-only signal.
@@ -117,29 +158,61 @@ def weak_label(title: str) -> int | None:
 
 GOLD: list[tuple[str, int]] = [
     # real songs (incl. tricky high-TTR / short / meta-sounding ones)
-    ("Shake It Off", 1), ("98 Freestyle", 1), ("Black Hoodies Interlude", 1),
-    ("A Milli", 1), ("Cruel Summer", 1), ("Bombaclat", 1), ("Mr. Carter", 1),
-    ("champagne problems", 1), ("Just Pretend", 1), ("Encore / Curtains Down", 1),
-    ("C.R.E.A.M.", 1), ("Intro", 1), ("Outro", 1), ("The Skit", 1),
-    ("Love Letter", 1), ("Performance", 1), ("Statement", 1), ("Speech", 1),
-    ("Freestyle", 1), ("Reprise", 1), ("Last Christmas", 1), ("Style", 1),
-    ("Tim McGraw", 1), ("All Too Well", 1), ("Lover", 1), ("seven", 1),
-    ("no body no crime", 1), ("exile", 1), ("Welcome to New York", 1),
+    ("Shake It Off", 1),
+    ("98 Freestyle", 1),
+    ("Black Hoodies Interlude", 1),
+    ("A Milli", 1),
+    ("Cruel Summer", 1),
+    ("Bombaclat", 1),
+    ("Mr. Carter", 1),
+    ("champagne problems", 1),
+    ("Just Pretend", 1),
+    ("Encore / Curtains Down", 1),
+    ("C.R.E.A.M.", 1),
+    ("Intro", 1),
+    ("Outro", 1),
+    ("The Skit", 1),
+    ("Love Letter", 1),
+    ("Performance", 1),
+    ("Statement", 1),
+    ("Speech", 1),
+    ("Freestyle", 1),
+    ("Reprise", 1),
+    ("Last Christmas", 1),
+    ("Style", 1),
+    ("Tim McGraw", 1),
+    ("All Too Well", 1),
+    ("Lover", 1),
+    ("seven", 1),
+    ("no body no crime", 1),
+    ("exile", 1),
+    ("Welcome to New York", 1),
     # non-songs
-    ("Reputation Tour Costumes", 0), ("Speak Now Tour Costumes", 0),
-    ("Playlist by ME", 0), ("Songs Taylor Loves Playlist", 0),
-    ("Taylor Swifts Chart History", 0), ("A Message From Taylor", 0),
+    ("Reputation Tour Costumes", 0),
+    ("Speak Now Tour Costumes", 0),
+    ("Playlist by ME", 0),
+    ("Songs Taylor Loves Playlist", 0),
+    ("Taylor Swifts Chart History", 0),
+    ("A Message From Taylor", 0),
     ("The Making Of A Song - King of My Heart", 0),
     ("Taylor Swifts First Phone Call With Tim McGraw", 0),
     ("AMAs Artist of the Decade Performance", 0),
-    ("Political Instagram Post", 0), ("Folklore Foreword", 0),
-    ("Lover Foreword", 0), ("Reputation Tour Book Intro", 0),
-    ("Reputation Tour Special Guests", 0), ("1989 World Tour Costumes", 0),
-    ("ESPYs Conference Call", 0), ("Drake Discography", 0),
-    ("Lemonade Film Script", 0), ("Beyoncé VMAs 2014", 0),
-    ("Grammy Acceptance Speech", 0), ("Red Taylors Version Traducción asturiana", 0),
-    ("The Archer Türkçe Sözleri", 0), ("Taylor Swift Responds To Kanyes Famous Lyric", 0),
-    ("DJ Semtex Interview", 0), ("Reputation Prologue", 0),
+    ("Political Instagram Post", 0),
+    ("Folklore Foreword", 0),
+    ("Lover Foreword", 0),
+    ("Reputation Tour Book Intro", 0),
+    ("Reputation Tour Special Guests", 0),
+    ("1989 World Tour Costumes", 0),
+    ("ESPYs Conference Call", 0),
+    ("Drake Discography", 0),
+    ("Lemonade Film Script", 0),
+    ("Beyoncé VMAs 2014", 0),
+    ("Grammy Acceptance Speech", 0),
+    ("Red Taylors Version Traducción asturiana", 0),
+    ("The Archer Türkçe Sözleri", 0),
+    ("Taylor Swift Responds To Kanyes Famous Lyric", 0),
+    ("DJ Semtex Interview", 0),
+    ("Reputation Prologue", 0),
 ]
 
 
@@ -172,8 +245,10 @@ def cmd_audit() -> None:
             junk.append(t)
         elif lbl == 1:
             song.append(t)
-    print(f"weak labels: {len(junk):,} non-song, {len(song):,} song "
-          f"({len(junk)/max(1,len(titles))*100:.2f}% junk)\n")
+    print(
+        f"weak labels: {len(junk):,} non-song, {len(song):,} song "
+        f"({len(junk) / max(1, len(titles)) * 100:.2f}% junk)\n"
+    )
     rnd = random.Random(42)
     print("=== 30 random NON-SONG (check for false positives) ===")
     for t in rnd.sample(junk, min(30, len(junk))):
@@ -218,8 +293,15 @@ def cmd_train() -> None:
 
     print(f"training fastText on {len(data):,} rows …", flush=True)
     model = fasttext.train_supervised(
-        input=train_path, lr=0.5, epoch=25, wordNgrams=2,
-        dim=50, minn=2, maxn=5, loss="softmax", verbose=0,
+        input=train_path,
+        lr=0.5,
+        epoch=25,
+        wordNgrams=2,
+        dim=50,
+        minn=2,
+        maxn=5,
+        loss="softmax",
+        verbose=0,
     )
     model.save_model(MODEL_PATH)
     print(f"  saved → {MODEL_PATH}")
@@ -246,7 +328,7 @@ def cmd_train() -> None:
     total = len(GOLD)
     print(f"  songs kept (tp): {tp}   junk caught (tn): {tn}")
     print(f"  false-drops (fp): {fp}  missed junk (fn): {fn}")
-    print(f"  accuracy: {(tp+tn)/total*100:.1f}%")
+    print(f"  accuracy: {(tp + tn) / total * 100:.1f}%")
     for w in wrong:
         print(w)
 

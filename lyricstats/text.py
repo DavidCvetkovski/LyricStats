@@ -69,9 +69,7 @@ def clean_raw(raw: str) -> str:
     return text.strip()
 
 
-_TITLE_MARKER_RE = re.compile(
-    r"^(tekst pesme|tekst|lyrics for|.*lyrics)\b", re.IGNORECASE
-)
+_TITLE_MARKER_RE = re.compile(r"^(tekst pesme|tekst|lyrics for|.*lyrics)\b", re.IGNORECASE)
 
 
 def parse_sections(text: str) -> list[Section]:

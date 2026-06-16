@@ -90,14 +90,7 @@ POP_FOLK = [
 
 def curated_list() -> list[str]:
     """Must-haves first, then the rest, de-duplicated, order preserved."""
-    everyone = (
-        MUST_HAVES
-        + SERBIAN_BOSNIAN_RAP
-        + POP_TRAP
-        + CROATIAN
-        + MACEDONIAN
-        + POP_FOLK
-    )
+    everyone = MUST_HAVES + SERBIAN_BOSNIAN_RAP + POP_TRAP + CROATIAN + MACEDONIAN + POP_FOLK
     seen: set[str] = set()
     ordered: list[str] = []
     for name in everyone:

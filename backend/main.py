@@ -8,6 +8,8 @@ calling `/api/artist/pool` once, then `/api/song/by-id` per song, then
 
 from __future__ import annotations
 
+from collections import Counter
+import builtins
 import json
 import logging
 import random
@@ -18,7 +20,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from lyricstats import db, fetch, stats
-from lyricstats.config import SEED_KEY
+from lyricstats.config import SEED_KEY, LIVE_FETCH_ENABLED
+from lyricstats.text import tokenize, all_lines
+
 
 log = logging.getLogger("lyricstats.api")
 logging.basicConfig(level=logging.INFO)
@@ -80,9 +84,7 @@ def ingest(song: IngestSong, x_seed_key: str = Header(default="")) -> dict[str, 
     if not song.lyrics.strip():
         raise HTTPException(status_code=400, detail="Empty lyrics.")
 
-    a = db.get_or_create_artist(
-        song.artist, genius_id=song.artist_id, genius_url=song.artist_url
-    )
+    a = db.get_or_create_artist(song.artist, genius_id=song.artist_id, genius_url=song.artist_url)
     db.upsert_song(
         a,
         title=song.title,
@@ -219,7 +221,9 @@ def _aggregate_payload(name: str, n: int, shuffle: str) -> dict[str, Any]:
         "genius_url": a.genius_url,
         "songs": metas,
         "stats": agg.to_dict(),
-        "cached_total": len(valid_songs),
+        "cached_total": len(valid_songs)
+        if len(valid_songs) <= n
+        else (a.total_songs if a.total_songs else len(valid_songs)),
         "sampled": len(sampled_pairs),
         # A live/lyrics-backed artist with fewer than MIN_VIEW songs is a
         # partial picture (e.g. niche artists with little on lrclib/ovh).
@@ -241,18 +245,20 @@ def _dataset_payload(agg: db.ArtistAggregate) -> dict[str, Any]:
         try:
             for row in json.loads(agg.songs_json):
                 title, year, wc, uniq, ttr, chorus, rep, has_sec = row
-                songs.append({
-                    "title": title,
-                    "album": None,
-                    "year": year,
-                    "word_count": wc,
-                    "unique_words": uniq,
-                    "type_token_ratio": ttr,
-                    "chorus_ratio": chorus,
-                    "repetition_ratio": rep,
-                    "line_count": 0,
-                    "has_sections": bool(has_sec),
-                })
+                songs.append(
+                    {
+                        "title": title,
+                        "album": None,
+                        "year": year,
+                        "word_count": wc,
+                        "unique_words": uniq,
+                        "type_token_ratio": ttr,
+                        "chorus_ratio": chorus,
+                        "repetition_ratio": rep,
+                        "line_count": 0,
+                        "has_sections": bool(has_sec),
+                    }
+                )
         except (ValueError, TypeError):
             songs = []
     return {
@@ -268,6 +274,33 @@ def _dataset_payload(agg: db.ArtistAggregate) -> dict[str, Any]:
     }
 
 
+def _get_merged_song_count(agg: db.ArtistAggregate | None, lb: db.Artist | None) -> int:
+    dataset_titles = set()
+    if agg and agg.songs_json:
+        try:
+            for row in json.loads(agg.songs_json):
+                dataset_titles.add(row[0].strip().lower())
+        except Exception:
+            pass
+
+    live_titles = set()
+    if lb:
+        all_songs = db.list_songs(lb)
+        for s in all_songs:
+            if not s.lyrics or not s.lyrics.strip():
+                continue
+            cached = db.load_stats(s)
+            if cached and "word_count" in cached:
+                if cached["word_count"] == 0:
+                    continue
+            live_titles.add(s.title.strip().lower())
+
+    if not agg:
+        return len(live_titles)
+
+    return len(dataset_titles.union(live_titles))
+
+
 @app.get("/api/artist/suggest")
 def artist_suggest(
     q: str = Query("", max_length=120),
@@ -279,11 +312,12 @@ def artist_suggest(
     artists, returning display names plus catalogue size to disambiguate.
     """
     rows = db.search_artist_aggregates(q, limit=limit)
-    return {
-        "suggestions": [
-            {"name": r.display_name, "song_count": r.song_count} for r in rows
-        ]
-    }
+    suggestions = []
+    for r in rows:
+        lb = db.get_artist(r.name)
+        count = _get_merged_song_count(r, lb)
+        suggestions.append({"name": r.display_name, "song_count": count})
+    return {"suggestions": suggestions}
 
 
 @app.get("/api/artist/pool")
@@ -306,36 +340,26 @@ def artist_pool(
     cached_valid = [s for s in cached_songs if s.lyrics and s.lyrics.strip()]
     agg = db.get_artist_aggregate(name)
 
-    # 1. Prefer the precomputed dataset aggregate when it's richer than whatever
-    #    we have cached — a stray cached song or two must not shadow it. Answers
-    #    instantly with zero fetches.
-    if not fresh and agg and agg.song_count > len(cached_valid):
-        return {
-            "name": agg.display_name,
-            "genius_url": None,
-            "to_fetch": [],
-            "cached_total": agg.song_count,
-        }
+    merged_count = _get_merged_song_count(agg, existing)
 
-    # 2. Lyrics-backed cache already holds a full view (>= MIN_VIEW valid songs),
-    #    OR we've already cached everything Genius has for this artist (a niche
-    #    artist with < MIN_VIEW total): serve it, no fetch. The latter avoids
-    #    re-querying Genius on every view for limited catalogues.
+    # 1. We fast-return if we ALREADY have enough songs (dataset + cache) to satisfy
+    #    the user's request `min`, OR if we have exhausted everything Genius has.
+    cached_songs = db.list_songs(existing) if existing else []
     exhausted = (
         existing is not None
         and existing.total_songs is not None
         and existing.total_songs >= 1
         and len(cached_songs) >= existing.total_songs
     )
-    if not fresh and (len(cached_valid) >= MIN_VIEW or exhausted):
+    if not fresh and (merged_count >= min or exhausted):
         return {
-            "name": existing.name if existing else name,
+            "name": agg.display_name if agg else (existing.name if existing else name),
             "genius_url": existing.genius_url if existing else None,
             "to_fetch": [],
-            "cached_total": len(cached_valid),
+            "cached_total": merged_count,
         }
 
-    # 3. Nothing cached and not in the dataset: a typo may have a close dataset
+    # 2. Nothing cached and not in the dataset: a typo may have a close dataset
     #    match — suggest it instead of a slow live fetch.
     if not cached_valid and not agg:
         suggestions = db.suggest_artist_aggregates(name, limit=1)
@@ -348,11 +372,20 @@ def artist_pool(
                 "suggestion": suggestions[0].display_name,
             }
 
-    # 4. Live fetch toward the MIN_VIEW floor. resolve_and_sample re-queries
-    #    Genius (refreshing total_songs), so a stale low count can't strand us;
-    #    it naturally returns only as many as the artist actually has.
+    # 3. Live fetch toward the `min` floor. resolve_and_sample re-queries
+    #    Genius (refreshing total_songs), so a stale low count can't strand us.
+    if not LIVE_FETCH_ENABLED:
+        return {
+            "name": agg.display_name if agg else (existing.name if existing else name),
+            "genius_url": existing.genius_url if existing else None,
+            "to_fetch": [],
+            "cached_total": merged_count,
+        }
+
     try:
-        a, sample = fetch.resolve_and_sample(name, MIN_VIEW, shuffle_seed=shuffle or None)
+        a, sample = fetch.resolve_and_sample(
+            name, min, pool_size=min, shuffle_seed=shuffle or None
+        )
     except fetch.FetchError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001
@@ -363,13 +396,26 @@ def artist_pool(
     cached_genius_ids = {s.genius_id for s in all_cached if s.genius_id is not None}
     cached_titles = {s.title.strip().lower() for s in all_cached}
 
+    dataset_titles = set()
+    if agg and agg.songs_json:
+        try:
+            for row in json.loads(agg.songs_json):
+                dataset_titles.add(row[0].strip().lower())
+        except Exception:
+            pass
+
     to_fetch = []
     for m in sample:
         song_id = m.get("id")
         if not song_id:
             continue
         title = m.get("title", "?")
-        if int(song_id) in cached_genius_ids or title.strip().lower() in cached_titles:
+        norm_title = title.strip().lower()
+        if (
+            int(song_id) in cached_genius_ids
+            or norm_title in cached_titles
+            or norm_title in dataset_titles
+        ):
             continue
         to_fetch.append({"id": int(song_id), "title": title})
 
@@ -377,7 +423,7 @@ def artist_pool(
         "name": a.name,
         "genius_url": a.genius_url,
         "to_fetch": to_fetch,
-        "cached_total": len(all_cached),
+        "cached_total": _get_merged_song_count(agg, a),
     }
 
 
@@ -408,34 +454,204 @@ def artist(
     min: int = Query(20, ge=1, le=500, alias="min"),
     shuffle: str = Query("", max_length=32),
 ) -> dict[str, Any]:
-    """Aggregate stats over a random sample of the artist's cached songs.
-
-    Pure read + compute over the shared cache (no Genius fetch), so it returns
-    quickly. The browser calls this after it has populated the cache via
-    `/api/artist/pool` + `/api/song/by-id`.
+    """Aggregate stats over a dynamically merged catalogue of precomputed dataset
+    songs and live-cached songs.
     """
-    # Prefer whichever source is richer. A few English artists have a stray
-    # lyrics-backed song or two cached from past live searches; that thin cache
-    # must not shadow a full dataset aggregate (e.g. Drake: 1 cached vs 482).
     agg = db.get_artist_aggregate(name)
-    if agg:
-        lb = db.get_artist(name)
-        lb_valid = 0
-        if lb:
-            lb_valid = sum(
-                1 for s in db.list_songs(lb) if s.lyrics and s.lyrics.strip()
-            )
-        if agg.song_count > lb_valid:
-            return _dataset_payload(agg)
+    lb = db.get_artist(name)
 
-    try:
-        return _aggregate_payload(name, n=min, shuffle=shuffle)
-    except HTTPException as e:
-        # No lyrics-backed catalogue cached — fall back to the precomputed
-        # dataset aggregate (instant, no fetches) if we have one.
-        if e.status_code == 404 and agg:
-            return _dataset_payload(agg)
-        raise
-    except Exception as e:  # noqa: BLE001
-        log.exception("aggregate failed")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    if not agg and not lb:
+        raise HTTPException(status_code=404, detail=f"No cached data for '{name}'.")
+
+    display_name = agg.display_name if agg else (lb.name if lb else name)
+    genius_url = lb.genius_url if lb else None
+
+    # 1. Parse dataset songs
+    dataset_songs_map = {}
+    if agg and agg.songs_json:
+        try:
+            for row in json.loads(agg.songs_json):
+                title, year, wc, uniq, ttr, chorus, rep, has_sec = row
+                norm_title = title.strip().lower()
+                dataset_songs_map[norm_title] = {
+                    "title": title,
+                    "album": None,
+                    "year": year,
+                    "word_count": wc,
+                    "unique_words": uniq,
+                    "type_token_ratio": ttr,
+                    "chorus_ratio": chorus,
+                    "repetition_ratio": rep,
+                    "line_count": 0,
+                    "has_sections": bool(has_sec),
+                }
+        except Exception:
+            pass
+
+    # 2. Parse live cached songs
+    live_songs_map = {}
+    valid_songs = []
+    if lb:
+        all_songs = db.list_songs(lb)
+        for s in all_songs:
+            if not s.lyrics or not s.lyrics.strip():
+                continue
+            cached = db.load_stats(s)
+            if cached and "word_count" in cached:
+                if cached["word_count"] == 0:
+                    continue
+                st = stats.SongStats.from_dict(cached)
+            else:
+                st = stats.compute(s.lyrics)
+                db.save_stats(s, st.to_dict())
+                if st.word_count == 0:
+                    continue
+
+            norm_title = s.title.strip().lower()
+            song_data = {
+                "title": s.title,
+                "album": s.album,
+                "year": s.year,
+                "word_count": st.word_count,
+                "unique_words": st.unique_words,
+                "type_token_ratio": st.type_token_ratio,
+                "chorus_ratio": st.chorus_ratio,
+                "repetition_ratio": st.repetition_ratio,
+                "line_count": st.line_count,
+                "has_sections": any(k != "other" for k in st.section_kinds),
+            }
+            live_songs_map[norm_title] = song_data
+            valid_songs.append((s, st))
+
+    # 3. Merge: prefer live cache over dataset
+    merged_songs_map = {}
+    merged_songs_map.update(dataset_songs_map)
+    merged_songs_map.update(live_songs_map)
+
+    # Sort merged songs by word_count descending
+    merged_songs = sorted(merged_songs_map.values(), key=lambda x: x["word_count"], reverse=True)
+
+    if not merged_songs:
+        raise HTTPException(status_code=404, detail=f"No songs with lyrics for '{name}'.")
+
+    # 4. Compile / Update statistics
+    if agg:
+        # We have a dataset base. Let's load the aggregate stats
+        agg_stats = db.load_aggregate_stats(agg) or {}
+
+        # Recalculate aggregates over all merged songs
+        merged_len = len(merged_songs)
+        song_count = merged_len
+        agg_stats["song_count"] = song_count
+
+        new_words = sum(
+            s["word_count"] for title, s in live_songs_map.items() if title not in dataset_songs_map
+        )
+        total_words = agg_stats.get("total_words", 0) + new_words
+        agg_stats["total_words"] = total_words
+        agg_stats["avg_words_per_song"] = round(total_words / song_count, 2) if song_count else 0.0
+
+        agg_stats["avg_ttr"] = (
+            round(sum(s["type_token_ratio"] for s in merged_songs) / merged_len, 4)
+            if merged_len
+            else 0.0
+        )
+
+        sec_songs = [s for s in merged_songs if s["has_sections"]]
+        agg_stats["avg_chorus_ratio"] = (
+            round(sum(s["chorus_ratio"] for s in sec_songs) / len(sec_songs), 4)
+            if sec_songs
+            else 0.0
+        )
+        agg_stats["avg_repetition_ratio"] = (
+            round(sum(s["repetition_ratio"] for s in merged_songs) / merged_len, 4)
+            if merged_len
+            else 0.0
+        )
+
+        # Highlights
+        _DEMO_KW = (
+            "(demo)",
+            "[demo]",
+            "(snippet)",
+            "[snippet]",
+            "(teaser)",
+            "[teaser]",
+            "(promo)",
+            "[promo]",
+            "(skit)",
+            "[skit]",
+        )
+        eligible = [
+            s
+            for s in merged_songs
+            if s["word_count"] >= 80 and not any(kw in s["title"].lower() for kw in _DEMO_KW)
+        ]
+        if not eligible:
+            eligible = merged_songs
+
+        if eligible:
+            longest = max(eligible, key=lambda s: s["word_count"])
+            shortest = builtins.min(eligible, key=lambda s: s["word_count"])
+            richest = max(eligible, key=lambda s: s["type_token_ratio"])
+            agg_stats["longest_song"] = {"title": longest["title"], "words": longest["word_count"]}
+            agg_stats["shortest_song"] = {
+                "title": shortest["title"],
+                "words": shortest["word_count"],
+            }
+            agg_stats["richest_song"] = {
+                "title": richest["title"],
+                "ttr": richest["type_token_ratio"],
+            }
+
+        # Merge top words counts for any new songs in the live cache
+        new_songs_objs = [
+            s for s, st in valid_songs if s.title.strip().lower() not in dataset_songs_map
+        ]
+        if new_songs_objs:
+            top_words_dict = {w: c for w, c in agg_stats.get("top_words", [])}
+            top_words_no_stop_dict = {w: c for w, c in agg_stats.get("top_words_no_stop", [])}
+
+            global_counts = Counter()
+            for ns in new_songs_objs:
+                tokens = tokenize(" ".join(all_lines(ns.lyrics)))
+                global_counts.update(tokens)
+
+            for w, c in global_counts.items():
+                if w in top_words_dict:
+                    top_words_dict[w] += c
+                if w not in stats.STOPWORDS and w in top_words_no_stop_dict:
+                    top_words_no_stop_dict[w] += c
+
+            agg_stats["top_words"] = sorted(
+                top_words_dict.items(), key=lambda x: x[1], reverse=True
+            )[:30]
+            agg_stats["top_words_no_stop"] = sorted(
+                top_words_no_stop_dict.items(), key=lambda x: x[1], reverse=True
+            )[:30]
+
+        has_sections = agg.has_sections or any(s["has_sections"] for s in merged_songs)
+        source = "dataset"
+        limited = False
+        cached_total = song_count
+    else:
+        # Only live cache exists. Run full aggregation over all cached songs.
+        songs_with_lyrics = [(s.title, s.lyrics) for s, st in valid_songs]
+        agg_stats_obj = stats.aggregate(songs_with_lyrics)
+        agg_stats = agg_stats_obj.to_dict()
+        has_sections = any(s["has_sections"] for s in merged_songs)
+        source = "cache"
+        limited = len(valid_songs) < MIN_VIEW
+        cached_total = len(valid_songs)
+
+    return {
+        "name": display_name,
+        "genius_url": genius_url,
+        "songs": merged_songs,
+        "stats": agg_stats,
+        "cached_total": cached_total,
+        "sampled": len(merged_songs),
+        "has_sections": has_sections,
+        "source": source,
+        "limited": limited,
+    }

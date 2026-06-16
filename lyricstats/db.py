@@ -70,12 +70,12 @@ class ArtistAggregate(SQLModel, table=True):
     """
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    name: str = Field(index=True, unique=True)       # _norm (strip+lower) key
-    name_key: str = Field(default="", index=True)    # aggressive key for fuzzy/auto match
-    display_name: str                                 # original casing for display
+    name: str = Field(index=True, unique=True)  # _norm (strip+lower) key
+    name_key: str = Field(default="", index=True)  # aggressive key for fuzzy/auto match
+    display_name: str  # original casing for display
     song_count: int = Field(default=0, index=True)
     has_sections: bool = Field(default=False)
-    stats_json: str = ""                              # full ArtistStats.to_dict()
+    stats_json: str = ""  # full ArtistStats.to_dict()
     # Compact per-song list for the catalogue: JSON array of
     # [title, year, word_count, unique_words, ttr, chorus_ratio, rep_ratio, has_sec].
     # No lyrics — song pages still fetch those live.
@@ -95,9 +95,9 @@ def _make_engine():
         url = DATABASE_URL
         # Normalise common Postgres URL forms to the psycopg (v3) driver.
         if url.startswith("postgres://"):
-            url = "postgresql+psycopg://" + url[len("postgres://"):]
+            url = "postgresql+psycopg://" + url[len("postgres://") :]
         elif url.startswith("postgresql://"):
-            url = "postgresql+psycopg://" + url[len("postgresql://"):]
+            url = "postgresql+psycopg://" + url[len("postgresql://") :]
         return create_engine(url, echo=False, pool_pre_ping=True)
     return create_engine(f"sqlite:///{DB_PATH}", echo=False)
 
@@ -349,9 +349,7 @@ def suggest_artist_aggregates(name: str, limit: int = 1) -> list["ArtistAggregat
         candidates = s.exec(
             select(ArtistAggregate).where(ArtistAggregate.name_key.like(f"{prefix}%"))  # type: ignore[attr-defined]
         ).all()
-    scored = [
-        (difflib.SequenceMatcher(None, key, c.name_key).ratio(), c) for c in candidates
-    ]
+    scored = [(difflib.SequenceMatcher(None, key, c.name_key).ratio(), c) for c in candidates]
     scored = [sc for sc in scored if sc[0] > 0.6]
     scored.sort(key=lambda sc: (sc[0], sc[1].song_count), reverse=True)
     return [c for _, c in scored[:limit]]
@@ -370,9 +368,7 @@ def upsert_artist_aggregate(
     nkey = normalize_key(name)
     payload = json.dumps(stats, ensure_ascii=False)
     with session() as s:
-        existing = s.exec(
-            select(ArtistAggregate).where(ArtistAggregate.name == key)
-        ).first()
+        existing = s.exec(select(ArtistAggregate).where(ArtistAggregate.name == key)).first()
         if existing:
             existing.name_key = nkey
             existing.display_name = display_name

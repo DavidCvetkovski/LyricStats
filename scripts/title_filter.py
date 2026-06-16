@@ -17,9 +17,7 @@ _NORM_RE = re.compile(r"[^\w\s]", re.UNICODE)
 
 # Real song *types* that must never be dropped, even if a junk phrase grazes the
 # title (e.g. "The Interview Freestyle" is a freestyle, not an interview page).
-_SONG_GUARD_RE = re.compile(
-    r"\b(freestyle|interlude|skit|reprise|instrumental)\b", re.IGNORECASE
-)
+_SONG_GUARD_RE = re.compile(r"\b(freestyle|interlude|skit|reprise|instrumental)\b", re.IGNORECASE)
 
 
 def normalize(title: str) -> str:
@@ -48,9 +46,7 @@ class TitleClassifier:
         return labels[0] == "__label__junk" and probs[0] >= self.threshold
 
 
-def load_classifier(
-    path: str = MODEL_PATH, threshold: float = 0.9
-) -> TitleClassifier | None:
+def load_classifier(path: str = MODEL_PATH, threshold: float = 0.9) -> TitleClassifier | None:
     """Load the model if present, else None so callers degrade gracefully to the
     deterministic blocklist (e.g. on a machine without fasttext / the model)."""
     if not os.path.exists(path):

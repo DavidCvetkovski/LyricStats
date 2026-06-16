@@ -18,6 +18,9 @@ import os
 import sys
 import time
 
+os.environ.pop("DATABASE_URL", None)
+os.environ.pop("POSTGRES_URL", None)
+
 from sqlalchemy import create_engine, insert, text
 from sqlmodel import Session, select
 
@@ -28,19 +31,19 @@ from lyricstats import db  # noqa: E402
 
 def _prod_url() -> str:
     url = None
-    if os.path.exists(".env.local"):
-        with open(".env.local") as f:
+    if os.path.exists(".env.prod"):
+        with open(".env.prod") as f:
             for line in f:
                 if line.strip().startswith("DATABASE_URL="):
                     raw = line.strip().split("=", 1)[1].split("#", 1)[0].strip()
                     url = raw.strip("'\"")
     if not url:
-        print("Error: DATABASE_URL not found in .env.local")
+        print("Error: DATABASE_URL not found in .env.prod")
         sys.exit(1)
     if url.startswith("postgres://"):
-        url = "postgresql+psycopg://" + url[len("postgres://"):]
+        url = "postgresql+psycopg://" + url[len("postgres://") :]
     elif url.startswith("postgresql://"):
-        url = "postgresql+psycopg://" + url[len("postgresql://"):]
+        url = "postgresql+psycopg://" + url[len("postgresql://") :]
     return url
 
 
@@ -53,20 +56,33 @@ def main() -> None:
     # Read every local aggregate as plain dicts (detached from the session).
     with Session(db._engine) as ls:
         rows = ls.exec(select(db.ArtistAggregate)).all()
-        payload = [
-            {
-                "name": r.name,
-                "name_key": r.name_key,
-                "display_name": r.display_name,
-                "song_count": r.song_count,
-                "has_sections": r.has_sections,
-                "stats_json": r.stats_json,
-                "songs_json": r.songs_json,
-                "source": r.source,
-                "built_at": r.built_at,
-            }
-            for r in rows
-        ]
+        payload = []
+        import json
+
+        for r in rows:
+            stats = json.loads(r.stats_json) if r.stats_json else {}
+            # Strip heavy metadata that blows up the database size
+            stats.pop("percentiles", None)
+            stats.pop("albums", None)
+            stats.pop("density_curve", None)
+            stats.pop("lang_mix", None)
+
+            songs = json.loads(r.songs_json) if r.songs_json else []
+            songs = songs[:500]  # Only store top 500 songs
+
+            payload.append(
+                {
+                    "name": r.name,
+                    "name_key": r.name_key,
+                    "display_name": r.display_name,
+                    "song_count": r.song_count,
+                    "has_sections": r.has_sections,
+                    "stats_json": json.dumps(stats, separators=(",", ":")),
+                    "songs_json": json.dumps(songs, separators=(",", ":")),
+                    "source": r.source,
+                    "built_at": r.built_at,
+                }
+            )
     print(f"Local aggregates to push: {len(payload):,}")
     if args.dry_run:
         return
@@ -95,7 +111,7 @@ def main() -> None:
             conn.execute(insert(tbl), payload[i : i + args.batch])
             if (i // args.batch) % 10 == 0:
                 print(f"  …{i:,}/{len(payload):,}", flush=True)
-    print(f"  inserted in {time.time()-t0:.0f}s")
+    print(f"  inserted in {time.time() - t0:.0f}s")
 
     print("Enabling pg_trgm + GIN index on name_key (fuzzy 'did you mean')…")
     with prod_engine.begin() as conn:

@@ -105,7 +105,7 @@ def test_meta_falls_back_to_singular_when_plural_absent():
 
 def test_artist_is_main_matches_partial_and_exact():
     assert _artist_is_main("Nucci", ["Voyage", "Nucci"]) is True
-    assert _artist_is_main("jala", ["Jala Brat"]) is True          # partial
+    assert _artist_is_main("jala", ["Jala Brat"]) is True  # partial
     assert _artist_is_main("Buba Corelli", ["Jala Brat"]) is False  # not a lead
     assert _artist_is_main("", ["Voyage"]) is False
 
@@ -121,14 +121,16 @@ def test_artist_songs_api_keeps_only_main_artist_songs():
         pool, reached_end = artist_songs_api(100)
 
     titles = [m["title"] for m in pool]
-    assert titles == ["Gad"]           # featured-only song dropped
+    assert titles == ["Gad"]  # featured-only song dropped
     assert reached_end is True
 
 
 def test_search_song_api_skips_featured_only_hit():
     # First hit: artist is only featured → skip. Second hit: artist is a lead → return.
     feat_hit = {"result": _api_song("Big Hit", (300, "Other"), [(300, "Other")], sid=9)}
-    lead_hit = {"result": _api_song("Gad", (100, "Voyage"), [(100, "Voyage"), (200, "Nucci")], sid=1)}
+    lead_hit = {
+        "result": _api_song("Gad", (100, "Voyage"), [(100, "Voyage"), (200, "Nucci")], sid=1)
+    }
     resp = {"response": {"hits": [feat_hit, lead_hit]}}
 
     with patch("lyricstats.fetch._genius_api_get", return_value=resp):
@@ -164,9 +166,10 @@ def test_fetch_one_by_id_when_cached_by_genius_id():
     mock_session.__enter__.return_value = mock_session
     mock_session.exec.return_value = mock_exec
 
-    with patch("lyricstats.db.session", return_value=mock_session), \
-         patch("lyricstats.fetch.get_lyrics") as mock_get_lyrics:
-
+    with (
+        patch("lyricstats.db.session", return_value=mock_session),
+        patch("lyricstats.fetch.get_lyrics") as mock_get_lyrics,
+    ):
         result = fetch.fetch_one_by_id(artist, song_id, "test title")
 
         assert result is True
@@ -191,10 +194,11 @@ def test_fetch_one_by_id_when_cached_by_title():
     mock_session.__enter__.return_value = mock_session
     mock_session.exec.return_value = mock_exec
 
-    with patch("lyricstats.db.session", return_value=mock_session), \
-         patch("lyricstats.db.find_song", return_value=mock_song) as mock_find_song, \
-         patch("lyricstats.fetch.get_lyrics") as mock_get_lyrics:
-
+    with (
+        patch("lyricstats.db.session", return_value=mock_session),
+        patch("lyricstats.db.find_song", return_value=mock_song) as mock_find_song,
+        patch("lyricstats.fetch.get_lyrics") as mock_get_lyrics,
+    ):
         result = fetch.fetch_one_by_id(artist, song_id, "test title")
 
         assert result is True

@@ -225,7 +225,7 @@ def _resolve(value: str | None, env: str, label: str) -> str:
 
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(description="Seed LyricStats with full lyrics.")
-    p.add_argument("artists", nargs="+", help="Artist names, e.g. \"Jala Brat\"")
+    p.add_argument("artists", nargs="+", help='Artist names, e.g. "Jala Brat"')
     p.add_argument("--songs", type=int, default=25, help="Songs per artist (default 25)")
     p.add_argument("--api-base", help="Deployed API base (env LYRICSTATS_API_BASE)")
     p.add_argument("--seed-key", help="Ingest secret (env SEED_KEY)")

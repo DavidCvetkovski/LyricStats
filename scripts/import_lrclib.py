@@ -438,6 +438,11 @@ def _dedupe_songs(rows: list[dict], toks: list[Counter]) -> list[int]:
         if cur is None or (r["has_synced"], r["wc"]) > \
                 (rows[cur]["has_synced"], rows[cur]["wc"]):
             best[root] = i
+            
+    for root, best_i in best.items():
+        shortest_title = min([rows[i]["title"] for i in range(len(rows)) if find(i) == root], key=len)
+        rows[best_i]["title"] = shortest_title
+        
     return sorted(best.values())
 
 
@@ -468,17 +473,40 @@ def fold_artist(rows: list[dict], *, min_songs: int, clf,
                 songs_cap: int = 500) -> tuple | None:
     # U+FFFD in the artist name = broken encoding upstream; the healthy
     # spelling of the same artist has its own (much larger) group.
-    rows = [r for r in rows
-            if "�" not in r["artist"]
-            and not is_non_song(r["title"], r["wc"], clf=clf)]
+    import re
+    def clean_title(title):
+        if not title: return ""
+        
+        parts = title.split(" - ")
+        if len(parts) > 1:
+            junk_keywords = ["remaster", "edit", "acoustic", "live", "version", "mix", "demo"]
+            if any(k in parts[-1].lower() for k in junk_keywords):
+                title = " - ".join(parts[:-1])
+
+        def replacer(match):
+            content = match.group(0)
+            if re.search(r'\b(feat\.?|ft\.?|featuring)\b', content, re.IGNORECASE):
+                return content
+            return ""
+            
+        title = re.sub(r'\([^)]*\)|\[[^\]]*\]', replacer, title)
+        
+        cleaned = title.strip()
+        return cleaned if cleaned else title
+
+    rows = [dict(r) for r in rows
+            if "\xef\xbf\xbd" not in r["artist"]
+            and not is_non_song(r["title"], r["wc"], r["ttr"], Counter(decode_tokens(r["toks"])), clf=clf)]
+            
     # NUL bytes from broken submissions break Postgres later; strip on entry
     for r in rows:
+        r["title"] = clean_title(r["title"])
         for f in ("artist", "title", "album"):
             if r[f] and "\x00" in r[f]:
                 r[f] = r[f].replace("\x00", "")
     # Decode each row's vocabulary once; reused for the content fingerprint
     # and the merged artist vocab below.
-    toks = [decode_tokens(r["toks"]) for r in rows]
+    toks = [Counter(decode_tokens(r["toks"])) for r in rows]
 
     # Dedupe to one row per distinct song. LRCLIB lists every release variant,
     # cover, karaoke and mislabelled re-upload separately, so a single key can't
@@ -537,7 +565,7 @@ def fold_artist(rows: list[dict], *, min_songs: int, clf,
             continue
         a_vocab = set()
         for r in ars:
-            a_vocab.update(decode_tokens(r["toks"]).keys())
+            a_vocab.update(Counter(decode_tokens(r["toks"])).keys())
         album_stats.append({
             "album": name, "songs": len(ars),
             "words": sum(r["wc"] for r in ars),

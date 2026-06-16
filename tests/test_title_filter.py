@@ -58,8 +58,13 @@ def test_is_junk_false_when_model_says_song():
 
 def test_guard_keeps_song_types_even_when_model_screams_junk():
     clf = tf.TitleClassifier(_StubModel("junk", 1.0), threshold=0.9)
-    for title in ("The Interview Freestyle", "Black Hoodies Interlude",
-                  "Steve Berman Skit", "Outro Reprise", "Piano Instrumental"):
+    for title in (
+        "The Interview Freestyle",
+        "Black Hoodies Interlude",
+        "Steve Berman Skit",
+        "Outro Reprise",
+        "Piano Instrumental",
+    ):
         assert clf.is_junk(title) is False, title
 
 
