@@ -547,9 +547,19 @@ function ArtistView({ data }: { data: ArtistPayload }) {
                   <blockquote className="relative pt-4">
                     <span className="absolute top-0 left-0 text-7xl text-rule font-serif leading-none -ml-5 mt-1">"</span>
                     <p className="relative z-10 font-serif italic text-lg leading-snug text-ink-soft">
-                      This is an example lyric where they use the word <span className="text-[#B4995F] font-medium">{topNoun[0]}</span> to devastating effect.
+                      {s.motif_quote ? (
+                        s.motif_quote.quote.split(new RegExp(`(${s.motif_quote.word})`, 'gi')).map((part, i) => 
+                          part.toLowerCase() === s.motif_quote!.word.toLowerCase() 
+                            ? <span key={i} className="text-[#B4995F] font-medium">{part}</span> 
+                            : part
+                        )
+                      ) : (
+                        <>This is an example lyric where they use the word <span className="text-[#B4995F] font-medium">{topNoun[0]}</span> to devastating effect.</>
+                      )}
                     </p>
-                    <div className="mt-4 text-xs uppercase tracking-widest text-ink-mute">— Song Name</div>
+                    <div className="mt-4 text-xs uppercase tracking-widest text-ink-mute">
+                      — {s.motif_quote ? s.motif_quote.song_title : "Song Name"}
+                    </div>
                   </blockquote>
                 </div>
 
@@ -557,7 +567,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
                 <div className="flex flex-col justify-center items-start md:items-end md:text-right pt-6 md:mt-32 md:-translate-x-6">
                   <div className="smallcaps text-ink-mute mb-4 md:mb-6">The Signature</div>
                   <div className="text-7xl sm:text-8xl lg:text-[7rem] leading-none font-serif italic text-[#B4995F] tracking-tight mb-6">
-                    {topNoun[0].toLowerCase()}
+                    {(s.motif_quote?.word || topNoun[0]).toLowerCase()}
                   </div>
                   <p className="font-serif italic text-ink-soft text-lg sm:text-xl max-w-[280px]">
                     An undeniable lyrical fingerprint uniquely woven throughout their catalogue.

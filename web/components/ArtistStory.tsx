@@ -45,7 +45,7 @@ const STAT_REGISTRY: StatDef[] = [
     label: "The Vocabulary",
     highCopy: (n, p) => `${n} commands a vocabulary **richer** than ${p}% of all artists — rarely repeating a word.`,
     lowCopy: (n, p) => `${n} leans on a tight, **focused** vocabulary — more concentrated than ${100 - p}% of artists.`,
-    globalMedian: 0.45,
+    globalMedian: 0.41,
     scaleMin: 0.2,
     scaleMax: 0.75,
   },
@@ -58,7 +58,7 @@ const STAT_REGISTRY: StatDef[] = [
     label: "The Output",
     highCopy: (n, p) => `${n} writes **more words** per song than ${p}% of artists — dense, verbose, maximalist.`,
     lowCopy: (n, p) => `${n} keeps it concise, writing **fewer words** per song than ${100 - p}% of all artists.`,
-    globalMedian: 310,
+    globalMedian: 243,
     scaleMin: 80,
     scaleMax: 700,
   },
@@ -71,7 +71,7 @@ const STAT_REGISTRY: StatDef[] = [
     label: "The Hook",
     highCopy: (n, p) => `${n} is **hook-driven** — more of each song is catchy repetition than ${p}% of artists.`,
     lowCopy: (n, p) => `${n} rarely leans on the hook, leaving **less to repetition** than ${100 - p}% of artists.`,
-    globalMedian: 0.30,
+    globalMedian: 0.29,
     scaleMin: 0.05,
     scaleMax: 0.65,
   },
@@ -96,7 +96,7 @@ const STAT_REGISTRY: StatDef[] = [
     label: "The Echo",
     highCopy: (n, p) => `${n} **repeats** their lines more than ${p}% of all artists — building mantras, not verses.`,
     lowCopy: (n, p) => `${n} rarely says the same thing twice — **less repetitive** than ${100 - p}% of artists.`,
-    globalMedian: 0.38,
+    globalMedian: 0.31,
     scaleMin: 0.10,
     scaleMax: 0.70,
   },
@@ -198,7 +198,17 @@ function HighlightedText({ text, isHero = false }: { text: string; isHero?: bool
 
 // ── Vocal Signature Box ──────────────────────────────────────────────────────
 
-function VocalSignatureBox({ word, count, songCount }: { word: string; count: number; songCount: number }) {
+function VocalSignatureBox({ 
+  word, 
+  count, 
+  songCount,
+  quote
+}: { 
+  word: string; 
+  count: number; 
+  songCount: number;
+  quote?: { quote: string; song_title: string } | null;
+}) {
   return (
     <div className="border border-rule-strong p-6 bg-paper-soft text-center w-full max-w-[280px] md:max-w-xs relative paper-grain shadow-sm transition-all duration-700">
       <div className="absolute inset-1 border border-dashed border-rule-strong/60 pointer-events-none" />
@@ -206,11 +216,23 @@ function VocalSignatureBox({ word, count, songCount }: { word: string; count: nu
       <div className="font-serif italic text-4xl text-ink font-bold my-4 leading-none break-words">
         &ldquo;{word}&rdquo;
       </div>
-      <p className="font-serif text-sm text-ink-soft leading-normal">
-        Repeated <strong className="font-sans font-bold text-ink">{count.toLocaleString()}</strong> times
-        <br />
-        across <strong className="font-sans font-bold text-ink">{songCount}</strong> songs
-      </p>
+      
+      {quote ? (
+        <div className="mt-6 mb-2 text-left border-l-2 border-accent/40 pl-4">
+          <p className="font-serif italic text-sm text-ink leading-relaxed mb-2">
+            &ldquo;{quote.quote}&rdquo;
+          </p>
+          <span className="text-[0.65rem] uppercase tracking-wider text-ink-soft font-sans font-semibold block">
+            — {quote.song_title}
+          </span>
+        </div>
+      ) : (
+        <p className="font-serif text-sm text-ink-soft leading-normal mb-2">
+          Repeated <strong className="font-sans font-bold text-ink">{count.toLocaleString()}</strong> times
+          <br />
+          across <strong className="font-sans font-bold text-ink">{songCount}</strong> songs
+        </p>
+      )}
     </div>
   );
 }
@@ -292,6 +314,7 @@ function TypewriterCard({
   align?: Align;
   topWord?: [string, number];
   songCount?: number;
+  motifQuote?: { word: string; quote: string; song_title: string } | null;
 }) {
   const { ref, revealed } = useScrollReveal(0.25);
   // The hero number is the percentile (always impressive side)
@@ -474,6 +497,7 @@ function InkBleedCard({
   align?: Align;
   topWord?: [string, number];
   songCount?: number;
+  motifQuote?: { word: string; quote: string; song_title: string } | null;
 }) {
   const { ref, revealed } = useScrollReveal(0.15);
   // Hero number is the percentile (impressive side)
@@ -628,7 +652,7 @@ function InkBleedCard({
               transitionDelay: isHero ? "600ms" : "0ms",
             }}
           >
-            <VocalSignatureBox word={topWord[0]} count={topWord[1]} songCount={songCount ?? 0} />
+            <VocalSignatureBox word={topWord[0]} count={topWord[1]} songCount={songCount ?? 0} quote={motifQuote} />
           </div>
         </div>
       ) : (
@@ -658,6 +682,9 @@ export function ArtistStory({ artistName, stats, topFreqNoun }: Props) {
   if (top3.length === 0) return null;
 
   const Card = mode === "typewriter" ? TypewriterCard : InkBleedCard;
+  
+  const bestWord = stats.motif_quote?.word || topFreqNoun?.[0] || stats.top_words_no_stop?.[0]?.[0] || "";
+  const bestWordCount = stats.top_words_no_stop?.find(w => w[0] === bestWord)?.[1] || topFreqNoun?.[1] || stats.top_words_no_stop?.[0]?.[1] || 0;
 
   return (
     <div className="mt-16 mb-20">
@@ -699,8 +726,9 @@ export function ArtistStory({ artistName, stats, topFreqNoun }: Props) {
             isHero={i === 0}
             artistName={i === 0 ? artistName : undefined}
             align={ALIGNS[i]}
-            topWord={topFreqNoun || stats.top_words_no_stop?.[0]}
+            topWord={[bestWord, bestWordCount]}
             songCount={stats.song_count}
+            motifQuote={stats.motif_quote}
           />
         ))}
       </div>
@@ -711,8 +739,8 @@ export function ArtistStory({ artistName, stats, topFreqNoun }: Props) {
 
 // Keep the old export for backward compatibility with any existing INDUSTRY_AVG references
 export const INDUSTRY_AVG = {
-  wordsPerSong: 310,
-  wordVariety: 0.45,
-  chorusShare: 0.25,
-  repetition: 0.38,
+  wordsPerSong: 243,
+  wordVariety: 0.41,
+  chorusShare: 0.29,
+  repetition: 0.31,
 };

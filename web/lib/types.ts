@@ -84,6 +84,7 @@ export type ArtistStats = {
   exclusive_words?: [string, number][] | null;
   percentiles?: Record<string, number | null> | null;
   lang_mix?: Record<string, number>;
+  motif_quote?: { word: string; quote: string; song_title: string } | null;
 };
 
 export type ArtistPayload = {
