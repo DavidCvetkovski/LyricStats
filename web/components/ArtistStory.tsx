@@ -489,6 +489,7 @@ function InkBleedCard({
   align = "left",
   topWord,
   songCount,
+  motifQuote,
 }: {
   stat: RankedStat;
   index: number;
