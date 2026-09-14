@@ -1,0 +1,12 @@
+# Allowlist: the build context is only what the API image copies. Everything
+# else in the repository (data/, .tmp/, .env files, the web app) stays out.
+*
+!requirements.txt
+!backend
+!lyricstats
+!infra/app/metrics.py
+!infra/app/instrumented.py
+**/__pycache__
+**/.DS_Store
+backend/.vercel
+backend/.gitignore

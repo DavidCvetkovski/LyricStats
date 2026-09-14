@@ -1,0 +1,71 @@
+# Receives Alertmanager notifications for the lyricstats namespace and logs
+# them (see tools/alert_sink.py). Alertmanager's route to it is configured in
+# infra/monitoring/values.yaml.
+apiVersion: v1
+kind: Service
+metadata:
+  name: alert-sink
+  labels:
+    app.kubernetes.io/name: alert-sink
+spec:
+  selector:
+    app.kubernetes.io/name: alert-sink
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alert-sink
+  labels:
+    app.kubernetes.io/name: alert-sink
+    app.kubernetes.io/component: alerting
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alert-sink
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alert-sink
+        app.kubernetes.io/component: alerting
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: alert-sink
+          image: lyricstats-api:dev
+          imagePullPolicy: IfNotPresent
+          command: ["python", "/tools/alert_sink.py"]
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 24Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: script
+              mountPath: /tools
+              readOnly: true
+      volumes:
+        - name: script
+          configMap:
+            name: alert-sink-script

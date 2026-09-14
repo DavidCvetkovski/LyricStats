@@ -1,0 +1,22 @@
+# App-specific monitoring, applied after kube-prometheus-stack is installed
+# (it needs the ServiceMonitor and PrometheusRule CRDs):
+#
+#   kubectl --context k3d-lyricstats apply -k infra/monitoring
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - postgres-exporter.yaml
+  - servicemonitors.yaml
+  - rules.yaml
+
+configMapGenerator:
+  # Grafana's sidecar loads every ConfigMap labelled grafana_dashboard=1.
+  - name: lyricstats-dashboards
+    namespace: monitoring
+    files:
+      - dashboards/lyricstats-overview.json
+    options:
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"

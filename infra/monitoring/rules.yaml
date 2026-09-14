@@ -1,0 +1,151 @@
+# Service level objectives and alerts for LyricStats.
+#
+# SLO: 99% of API requests succeed (anything but a 5xx counts as success; a
+# 404 for an unknown artist is a correct answer). Measured over 30 days, that
+# leaves an error budget of 1% of requests.
+#
+# Alerting follows the multi-window burn-rate approach from the Google SRE
+# Workbook: page when the budget is burning fast enough to be gone in about two
+# days, open a ticket when it would be gone in about five. Requiring both a
+# long and a short window to be over the threshold means the page arrives for
+# real, sustained problems and clears soon after the fix.
+#
+# Symptom alerts (error budget, latency) say users are hurting. Cause alerts
+# (API down, Postgres down, crash loops) say where to look. Every alert links to
+# a runbook in infra/runbooks.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: lyricstats
+  namespace: lyricstats
+  labels:
+    app.kubernetes.io/part-of: lyricstats
+spec:
+  groups:
+    - name: lyricstats-sli.recording
+      interval: 30s
+      rules:
+        # Fraction of user-facing API requests that failed. Health checks and
+        # /metrics scrapes are excluded. "or vector(0)" keeps the ratio at 0,
+        # rather than empty, while no request has ever returned a 5xx.
+        - record: lyricstats:sli_error_ratio:rate5m
+          expr: |
+            (sum(rate(lyricstats_http_requests_total{job="lyricstats-api",route=~"/api/.+",route!="/api/health",status=~"5.."}[5m])) or vector(0))
+            /
+            sum(rate(lyricstats_http_requests_total{job="lyricstats-api",route=~"/api/.+",route!="/api/health"}[5m]))
+        - record: lyricstats:sli_error_ratio:rate30m
+          expr: |
+            (sum(rate(lyricstats_http_requests_total{job="lyricstats-api",route=~"/api/.+",route!="/api/health",status=~"5.."}[30m])) or vector(0))
+            /
+            sum(rate(lyricstats_http_requests_total{job="lyricstats-api",route=~"/api/.+",route!="/api/health"}[30m]))
+        - record: lyricstats:sli_error_ratio:rate1h
+          expr: |
+            (sum(rate(lyricstats_http_requests_total{job="lyricstats-api",route=~"/api/.+",route!="/api/health",status=~"5.."}[1h])) or vector(0))
+            /
+            sum(rate(lyricstats_http_requests_total{job="lyricstats-api",route=~"/api/.+",route!="/api/health"}[1h]))
+        - record: lyricstats:sli_error_ratio:rate6h
+          expr: |
+            (sum(rate(lyricstats_http_requests_total{job="lyricstats-api",route=~"/api/.+",route!="/api/health",status=~"5.."}[6h])) or vector(0))
+            /
+            sum(rate(lyricstats_http_requests_total{job="lyricstats-api",route=~"/api/.+",route!="/api/health"}[6h]))
+        - record: lyricstats:http_request_duration_seconds:p95_5m
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(lyricstats_http_request_duration_seconds_bucket{job="lyricstats-api",route=~"/api/.+",route!="/api/health"}[5m])))
+
+    - name: lyricstats.alerts
+      rules:
+        - alert: LyricStatsErrorBudgetFastBurn
+          expr: |
+            lyricstats:sli_error_ratio:rate5m > (14.4 * 0.01)
+            and
+            lyricstats:sli_error_ratio:rate1h > (14.4 * 0.01)
+          for: 2m
+          labels:
+            severity: critical
+            namespace: lyricstats
+            slo: api-availability
+          annotations:
+            summary: LyricStats API is burning its monthly error budget 14x too fast.
+            description: >-
+              {{ $value | humanizePercentage }} of API requests failed over the last 5 minutes,
+              and more than 14.4% over the last hour (SLO: 99% succeed). At this rate the
+              30-day error budget is gone in about two days.
+            runbook_url: https://github.com/DavidCvetkovski/LyricStats/blob/main/infra/runbooks/LyricStatsErrorBudgetBurn.md
+
+        - alert: LyricStatsErrorBudgetSlowBurn
+          expr: |
+            lyricstats:sli_error_ratio:rate30m > (6 * 0.01)
+            and
+            lyricstats:sli_error_ratio:rate6h > (6 * 0.01)
+          for: 15m
+          labels:
+            severity: warning
+            namespace: lyricstats
+            slo: api-availability
+          annotations:
+            summary: LyricStats API is steadily burning its error budget (6x).
+            description: >-
+              More than 6% of API requests failed over both the last 30 minutes and the last
+              6 hours. Not an emergency, but the 30-day budget runs out in about five days.
+            runbook_url: https://github.com/DavidCvetkovski/LyricStats/blob/main/infra/runbooks/LyricStatsErrorBudgetBurn.md
+
+        - alert: LyricStatsHighLatency
+          expr: lyricstats:http_request_duration_seconds:p95_5m > 1
+          for: 10m
+          labels:
+            severity: warning
+            namespace: lyricstats
+          annotations:
+            summary: LyricStats API p95 latency is above 1 second.
+            description: >-
+              95th percentile latency has been {{ $value | humanizeDuration }} for 10 minutes.
+            runbook_url: https://github.com/DavidCvetkovski/LyricStats/blob/main/infra/runbooks/LyricStatsHighLatency.md
+
+        # Server-side error ratios go silent when there is no server to count
+        # requests, so a complete outage needs its own alert.
+        - alert: LyricStatsAPIDown
+          expr: |
+            sum(up{job="lyricstats-api"}) == 0
+            or
+            absent(up{job="lyricstats-api"})
+          for: 2m
+          labels:
+            severity: critical
+            namespace: lyricstats
+          annotations:
+            summary: No LyricStats API pod can be scraped.
+            description: >-
+              Prometheus has not reached any lyricstats-api pod for 2 minutes. The API is most
+              likely down for every user, and the error-budget alerts cannot see it.
+            runbook_url: https://github.com/DavidCvetkovski/LyricStats/blob/main/infra/runbooks/LyricStatsAPIDown.md
+
+        - alert: LyricStatsPostgresDown
+          expr: |
+            pg_up{job="postgres-exporter"} == 0
+            or
+            absent(pg_up{job="postgres-exporter"})
+          for: 1m
+          labels:
+            severity: critical
+            namespace: lyricstats
+          annotations:
+            summary: The LyricStats Postgres database is unreachable.
+            description: >-
+              postgres-exporter cannot connect to Postgres (or is not reporting at all).
+              Every API endpoint that reads the database is failing.
+            runbook_url: https://github.com/DavidCvetkovski/LyricStats/blob/main/infra/runbooks/LyricStatsPostgresDown.md
+
+        - alert: LyricStatsPodCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="lyricstats"}[10m]) >= 3
+          for: 1m
+          labels:
+            severity: warning
+            namespace: lyricstats
+          annotations:
+            summary: "{{ $labels.pod }} ({{ $labels.container }}) keeps restarting."
+            description: >-
+              Container {{ $labels.container }} in pod {{ $labels.pod }} restarted
+              {{ $value | printf "%.0f" }} times in the last 10 minutes.
+            runbook_url: https://github.com/DavidCvetkovski/LyricStats/blob/main/infra/runbooks/LyricStatsPodCrashLooping.md

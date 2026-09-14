@@ -1,0 +1,28 @@
+# One host, two backends: /api goes straight to the API Service, everything
+# else to the Next.js server. Served by Traefik (bundled with k3s) and reachable
+# at http://lyricstats.localhost:8080. /metrics is not routed, so it stays
+# inside the cluster.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lyricstats
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: lyricstats.localhost
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: lyricstats-api
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: lyricstats-web
+                port:
+                  name: http

@@ -1,0 +1,153 @@
+# kube-prometheus-stack (chart 91.4.0), trimmed for a single-node k3s cluster
+# on a laptop. Installed by `make monitoring` into the "monitoring" namespace.
+
+fullnameOverride: kps
+
+# k3s runs the scheduler, controller manager and kube-proxy inside the one k3s
+# process, and stores cluster state in SQLite (kine) instead of etcd. There is
+# nothing listening where these scrape jobs look, so left enabled they would
+# show as permanently down targets and fire alerts no one can act on.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeEtcd:
+  enabled: false
+
+# Host metrics from a Docker container on a laptop VM say little about the
+# app, and node-exporter's host mounts do not work well inside k3d. Container
+# CPU and memory still come from the kubelet (cAdvisor).
+nodeExporter:
+  enabled: false
+windowsMonitoring:
+  enabled: false
+
+defaultRules:
+  rules:
+    etcd: false
+    kubeControllerManager: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeProxy: false
+    node: false
+    nodeExporterAlerting: false
+    nodeExporterRecording: false
+    windows: false
+
+prometheus:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - prometheus.localhost
+    paths:
+      - /
+    pathType: Prefix
+  prometheusSpec:
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+    retention: 2d
+    # Select ServiceMonitors, PodMonitors and PrometheusRules from every
+    # namespace, not only the ones labelled for this Helm release. The app's
+    # monitors and alerts live next to the app, in the lyricstats namespace.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 200m
+        memory: 400Mi
+      limits:
+        memory: 1Gi
+
+alertmanager:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - alertmanager.localhost
+    paths:
+      - /
+    pathType: Prefix
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 20m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      # Everything goes nowhere by default, including the always-firing
+      # Watchdog. Only alerts about the lyricstats namespace notify anyone.
+      receiver: "null"
+      group_by: [alertname, namespace]
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 4h
+      routes:
+        - receiver: lyricstats-oncall
+          matchers:
+            - namespace = "lyricstats"
+    receivers:
+      - name: "null"
+      - name: lyricstats-oncall
+        webhook_configs:
+          - url: http://alert-sink.lyricstats.svc.cluster.local:8080/
+            send_resolved: true
+    inhibit_rules:
+      # While a critical alert is firing, do not also send the warning with
+      # the same name for the same namespace.
+      - source_matchers:
+          - severity = "critical"
+        target_matchers:
+          - severity = "warning"
+        equal: [alertname, namespace]
+
+grafana:
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - grafana.localhost
+    path: /
+  grafana.ini:
+    # Local-only convenience: dashboards are viewable without logging in.
+    auth.anonymous:
+      enabled: true
+      org_role: Viewer
+    analytics:
+      check_for_updates: false
+      reporting_enabled: false
+  defaultDashboardsTimezone: browser
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 384Mi
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 48Mi
+    limits:
+      memory: 128Mi

@@ -1,0 +1,23 @@
+# Local k3s cluster (k3s running inside Docker via k3d).
+#
+# One server node and no agents keeps it light enough for a laptop. Traefik,
+# which ships with k3s, is the ingress controller; the k3d load balancer maps
+# it to localhost:8080, so every UI is reachable at http://<name>.localhost:8080.
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: lyricstats
+servers: 1
+agents: 0
+image: rancher/k3s:v1.35.5-k3s1
+ports:
+  - port: 8080:80
+    nodeFilters:
+      - loadbalancer
+options:
+  k3d:
+    wait: true
+    timeout: 120s
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: true

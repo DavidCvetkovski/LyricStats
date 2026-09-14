@@ -1,0 +1,11 @@
+# Allowlist: only the web app goes into the build context. Local build output
+# and dependencies are rebuilt inside the image, and web/.env* stays out so
+# production values (NEXT_PUBLIC_API_BASE) are never baked into this build.
+*
+!web
+web/node_modules
+web/.next
+web/.vercel
+web/.env*
+web/tsconfig.tsbuildinfo
+**/.DS_Store

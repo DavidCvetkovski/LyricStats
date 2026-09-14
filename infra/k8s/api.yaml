@@ -1,0 +1,105 @@
+# FastAPI backend. Two replicas behind a Service, rolled one pod at a time and
+# never below two ready pods, so a bad release stalls instead of taking the API
+# down (see the bad-config drill in infra/drills).
+apiVersion: v1
+kind: Service
+metadata:
+  name: lyricstats-api
+  labels:
+    app.kubernetes.io/name: lyricstats-api
+spec:
+  selector:
+    app.kubernetes.io/name: lyricstats-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lyricstats-api
+  labels:
+    app.kubernetes.io/name: lyricstats-api
+    app.kubernetes.io/component: api
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lyricstats-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lyricstats-api
+        app.kubernetes.io/component: api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: lyricstats-api:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+            - name: DATABASE_URL
+              value: postgresql://lyricstats:$(POSTGRES_PASSWORD)@postgres:5432/lyricstats
+            # Serve only what is in the database: no outbound calls to Genius
+            # or lyric providers from inside the cluster.
+            - name: LIVE_FETCH_ENABLED
+              value: "0"
+            - name: GENIUS_SCRAPE
+              value: "0"
+          # /health does not touch the database on purpose. If it did, a
+          # database outage would mark every pod unready and turn clear 500s
+          # into "no endpoints" for the whole API.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 384Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: lyricstats-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lyricstats-api

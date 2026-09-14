@@ -1,0 +1,32 @@
+# Tell Prometheus (via the operator) what to scrape. The job label on the
+# resulting series is the Service name: lyricstats-api and postgres-exporter.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: lyricstats-api
+  namespace: lyricstats
+  labels:
+    app.kubernetes.io/part-of: lyricstats
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lyricstats-api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: postgres-exporter
+  namespace: lyricstats
+  labels:
+    app.kubernetes.io/part-of: lyricstats
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres-exporter
+  endpoints:
+    - port: metrics
+      interval: 15s

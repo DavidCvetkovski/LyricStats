@@ -1,0 +1,35 @@
+# LyricStats application stack: Postgres, API, web front end, Ingress, plus the
+# two helpers that make the monitoring meaningful on a laptop (steady traffic
+# and a webhook receiver that logs every alert notification).
+#
+#   kubectl --context k3d-lyricstats apply -k infra/k8s
+#
+# The postgres-credentials Secret is not in here on purpose: `make secrets`
+# generates a random password in the cluster so none is ever committed.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: lyricstats
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: lyricstats
+
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - api.yaml
+  - web.yaml
+  - ingress.yaml
+  - loadgen.yaml
+  - alert-sink.yaml
+
+configMapGenerator:
+  - name: postgres-init
+    files:
+      - tools/01-extensions.sql
+  - name: loadgen-script
+    files:
+      - tools/loadgen.py
+  - name: alert-sink-script
+    files:
+      - tools/alert_sink.py

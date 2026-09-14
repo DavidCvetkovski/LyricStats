@@ -1,0 +1,83 @@
+# Next.js front end (standalone server). Every page is prerendered and the
+# browser calls /api itself, so this pod does not depend on the API being up.
+apiVersion: v1
+kind: Service
+metadata:
+  name: lyricstats-web
+  labels:
+    app.kubernetes.io/name: lyricstats-web
+spec:
+  selector:
+    app.kubernetes.io/name: lyricstats-web
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lyricstats-web
+  labels:
+    app.kubernetes.io/name: lyricstats-web
+    app.kubernetes.io/component: web
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lyricstats-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lyricstats-web
+        app.kubernetes.io/component: web
+    spec:
+      securityContext:
+        # The image's user is "node" (uid 1000). Kubernetes can only verify
+        # runAsNonRoot against a numeric uid, so it is spelled out here.
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: web
+          image: lyricstats-web:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          # A static file: the probe checks the Next.js server, not the API.
+          readinessProbe:
+            httpGet:
+              path: /favicon.ico
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /favicon.ico
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 384Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # Next.js writes its runtime cache here.
+            - name: next-cache
+              mountPath: /web/.next/cache
+      volumes:
+        - name: next-cache
+          emptyDir:
+            sizeLimit: 256Mi
