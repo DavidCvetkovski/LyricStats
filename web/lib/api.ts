@@ -1,4 +1,6 @@
 import type { ArtistPayload, SongPayload } from "./types";
+import { MemoryCacheStore } from "./cache";
+import { artistKey } from "./utils";
 
 // In production NEXT_PUBLIC_API_BASE points at the Vercel Python API project
 // (e.g. https://lyricstats-api.vercel.app), so the browser calls it directly
@@ -7,7 +9,9 @@ import type { ArtistPayload, SongPayload } from "./types";
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
 async function get<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { cache: "no-store", ...init });
+  // Let API response headers govern browser/CDN reuse. Explicit refreshes
+  // below opt out, while ordinary reading can reuse a recent response.
+  const res = await fetch(`${BASE}${path}`, { cache: "default", ...init });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`API ${res.status}: ${body || res.statusText}`);
@@ -18,28 +22,67 @@ async function get<T>(path: string, init?: RequestInit): Promise<T> {
 export function getSong(
   artist: string,
   title: string,
-  opts?: { force?: boolean },
+  opts?: { force?: boolean; full?: boolean; signal?: AbortSignal },
 ): Promise<SongPayload> {
   const q = new URLSearchParams({ artist, title });
   if (opts?.force) q.set("force", "1");
-  return get<SongPayload>(`/api/song?${q.toString()}`);
+  if (opts?.full) q.set("full", "1");
+  return get<SongPayload>(`/api/song?${q.toString()}`, {
+    signal: opts?.signal,
+    ...(opts?.force ? { cache: "no-store" } : {}),
+  });
 }
 
 // ── artist typeahead ───────────────────────────────────────────────────────
 
 export type ArtistSuggestion = { name: string; song_count: number };
 
-/** Autocomplete suggestions from the precomputed dataset (instant, no fetch). */
+// Shared by the artist and song fields, with a fixed memory budget and refresh
+// window so catalogue updates become visible during long browsing sessions.
+const suggestionCache = new MemoryCacheStore<ArtistSuggestion[]>(100, 5 * 60 * 1000);
+
+export function getCachedArtistSuggestions(q: string, limit = 8): ArtistSuggestion[] | null {
+  const key = artistKey(q);
+  if (key.length < 2) return [];
+  const exact = suggestionCache.get(`${limit}:${key}`);
+  if (exact) return exact;
+
+  // Only a complete prefix result can safely answer a narrower query. A list
+  // capped at `limit` may omit the very artist the longer query is looking for.
+  for (let i = key.length - 1; i >= 2; i--) {
+    const prefix = suggestionCache.get(`${limit}:${key.slice(0, i)}`);
+    if (prefix && prefix.length < limit) {
+      return prefix
+        .filter((item) => artistKey(item.name).includes(key))
+        .sort((a, b) => {
+          const aStarts = Number(artistKey(a.name).startsWith(key));
+          const bStarts = Number(artistKey(b.name).startsWith(key));
+          return bStarts - aStarts || b.song_count - a.song_count;
+        });
+    }
+  }
+  return null;
+}
+
+/** Dataset autocomplete; repeated and safely narrowed queries stay local. */
 export function suggestArtists(
   q: string,
   limit = 8,
   signal?: AbortSignal,
 ): Promise<ArtistSuggestion[]> {
+  if (signal?.aborted) {
+    return Promise.reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+  }
+  const cached = getCachedArtistSuggestions(q, limit);
+  if (cached) return Promise.resolve(cached);
   const query = new URLSearchParams({ q, limit: String(limit) });
   return get<{ suggestions: ArtistSuggestion[] }>(
     `/api/artist/suggest?${query.toString()}`,
     { signal },
-  ).then((r) => r.suggestions);
+  ).then((r) => {
+    if (!signal?.aborted) suggestionCache.set(`${limit}:${artistKey(q)}`, r.suggestions);
+    return r.suggestions;
+  });
 }
 
 // ── artist (client-orchestrated fetch) ─────────────────────────────────────
@@ -78,7 +121,10 @@ export function getArtistPool(
   const q = new URLSearchParams({ name, min: String(min) });
   if (fresh) q.set("fresh", "1");
   if (shuffle) q.set("shuffle", shuffle);
-  return get<ArtistPool>(`/api/artist/pool?${q.toString()}`, { signal });
+  return get<ArtistPool>(`/api/artist/pool?${q.toString()}`, {
+    signal,
+    ...(fresh ? { cache: "no-store" } : {}),
+  });
 }
 
 /** Fetch and cache one song's lyrics by Genius id. */

@@ -59,25 +59,25 @@ export function friendlyError(err: unknown): FriendlyError {
   if (NETWORK_PATTERNS.some((p) => p.test(raw))) {
     return {
       headline: "Couldn't reach the server.",
-      detail: "The API isn't responding at the moment.",
-      suggestion: "Check that the backend is running, then try again.",
+      detail: "The song service is unavailable at the moment.",
+      suggestion: "Try again shortly, or use your own text on the song page.",
     };
   }
 
   if (AUTH_PATTERNS.some((p) => p.test(raw))) {
     return {
-      headline: "The API credentials are not accepted.",
+      headline: "The lyric service is unavailable.",
       detail:
-        "The lyric database service rejected our authentication.",
+        "We couldn’t open the lyric service.",
       suggestion:
-        "Verify the configuration and API tokens in the environment, then restart the server.",
+        "Please try again later, or use your own text.",
     };
   }
 
   if (RATE_LIMIT_PATTERNS.some((p) => p.test(raw))) {
     return {
       headline: "The lyric service is asking us to slow down.",
-      detail: "We have hit the rate limit on the external API.",
+      detail: "The lyric provider is temporarily limiting requests.",
       suggestion: "Wait a minute and try again — or try a song that's already cached.",
     };
   }
@@ -94,7 +94,7 @@ export function friendlyError(err: unknown): FriendlyError {
   if (STREAM_BROKEN_PATTERNS.some((p) => p.test(raw))) {
     return {
       headline: "The connection cut out mid-fetch.",
-      detail: "The request was dropped because the catalogue is too large.",
+      detail: "The connection ended before the reading was ready.",
       suggestion: "Try again in a moment, or view a smaller catalogue.",
     };
   }

@@ -1,56 +1,68 @@
+"use client";
+
 import Link from "next/link";
-import { DateLine } from "./DateLine";
+import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
+import { issues } from "@/lib/issues";
 
 export function Masthead() {
+  const pathname = usePathname();
+  const picker = useRef<HTMLDetailsElement>(null);
+  const trigger = useRef<HTMLElement>(null);
+  const close = () => { if (picker.current) picker.current.open = false; };
+
+  useEffect(() => { if (picker.current) picker.current.open = false; }, [pathname]);
+  useEffect(() => {
+    function outside(event: PointerEvent) {
+      if (event.target instanceof Node && !picker.current?.contains(event.target)) close();
+    }
+    function escape(event: KeyboardEvent) {
+      if (event.key === "Escape" && picker.current?.open) {
+        close(); trigger.current?.focus();
+      }
+    }
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, []);
+
   return (
-    <header className="border-b border-rule-strong">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 pt-5 sm:pt-7 pb-5 sm:pb-6">
-        {/* Folio strip — vol · date · established. On mobile keeps just two
-            ends so the row never wraps and the type stays readable. */}
-        <div className="flex items-center justify-between gap-3 sm:gap-6 text-[0.62rem] sm:text-[0.7rem] uppercase tracking-[0.16em] sm:tracking-[0.18em] text-ink-mute">
-          <span className="truncate">Vol. I · No. 1</span>
-          <span className="hidden md:inline truncate">
-            <DateLine />
-          </span>
-          <span className="truncate">Est. 2026</span>
+    <header className="masthead">
+      <a className="skip-link" href="#main-content">Skip to content</a>
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="masthead-folio">
+          <details className="issue-picker" ref={picker} onBlur={event => {
+            if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) close();
+          }}>
+            <summary ref={trigger}>
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 4.5h5.5L10 6l1.5-1.5H17v11h-5.5L10 17l-1.5-1.5H3zM10 6v11" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
+              <span>Browse issues</span>
+              <svg className="issue-chevron" width="10" height="7" viewBox="0 0 10 7" fill="none" aria-hidden="true"><path d="m1 1 4 4 4-4" stroke="currentColor" strokeWidth="1.2"/></svg>
+            </summary>
+            <nav className="issue-picker-panel" aria-label="Issues">
+              <div className="issue-picker-heading"><span>The journal</span><span>{String(issues.length).padStart(2, "0")} issues</span></div>
+              {issues.map((issue, index) => (
+                <Link key={issue.id} href={issue.href} prefetch={false} onClick={close} className="issue-picker-row" aria-current={pathname === issue.href || (pathname === "/" && index === 0) ? "page" : undefined}>
+                  <span className={`issue-miniature ${index === 0 ? "is-latest" : ""}`} aria-hidden="true"><span>LS</span><b>{issue.id}</b></span>
+                  <span className="min-w-0"><span className="issue-picker-kicker">Issue {issue.id}{index === 0 ? " · Latest" : ""}</span><span className="issue-picker-title">{issue.title}</span></span>
+                  <span className="issue-picker-arrow" aria-hidden="true">↗</span>
+                </Link>
+              ))}
+              <Link href="/issues" prefetch={false} onClick={close} className="issue-picker-all">View the issue archive <span aria-hidden="true">→</span></Link>
+            </nav>
+          </details>
+          <p className="masthead-note">Music, read closely.</p>
         </div>
-
-        {/* Wordmark — clamp shrinks more aggressively on small viewports */}
-        <Link href="/" className="block mt-5 sm:mt-7 text-center">
-          <h1
-            className="display text-ink leading-[0.88]"
-            style={{
-              fontSize: "clamp(2.5rem, 11vw, 6rem)",
-              fontVariationSettings: '"opsz" 144, "SOFT" 50',
-            }}
-          >
-            LyricStats
-          </h1>
-          <p
-            className="smallcaps mt-4 sm:mt-6"
-            style={{ fontSize: "clamp(0.58rem, 2vw, 0.68rem)" }}
-          >
-            A Quarterly Statistical Review of Popular Lyrics
-          </p>
-        </Link>
-
-        <hr className="hairline mt-6 sm:mt-8 mb-4 sm:mb-5 mx-auto max-w-xs opacity-60" />
-
-        {/* Nav — wraps gracefully on narrow phones; diamond ornament is hidden
-            on the smallest sizes so links don't shoulder-bump. */}
-        <nav className="flex flex-wrap items-center justify-center gap-x-5 sm:gap-x-10 md:gap-x-12 gap-y-2 text-[0.66rem] sm:text-[0.74rem] uppercase tracking-[0.16em] sm:tracking-[0.18em]">
-          <Link href="/" className="hover:text-accent transition-colors">
-            Front Page
-          </Link>
-          <Link
-            href="/song"
-            className="hover:text-accent transition-colors relative sm:before:content-['❖'] sm:before:text-accent sm:before:absolute sm:before:-left-6 sm:before:top-1/2 sm:before:-translate-y-1/2 sm:before:text-[0.6rem]"
-          >
-            On a Song
-          </Link>
-          <Link href="/artist" className="hover:text-accent transition-colors">
-            The Artist
-          </Link>
+        <Link href="/" className="masthead-wordmark" aria-label="LyricStats — front page">LyricStats</Link>
+        <nav className="masthead-nav" aria-label="Main navigation">
+          {[
+            {href: "/", label: "Journal", active: pathname === "/" || pathname.startsWith("/issues")},
+            {href: "/song", label: "Songs", active: pathname === "/song"},
+            {href: "/artist", label: "Artists", active: pathname === "/artist"},
+          ].map(item => <Link key={item.href} href={item.href} prefetch={false} data-active={item.active} aria-current={pathname === item.href ? "page" : undefined}>{item.label}</Link>)}
         </nav>
       </div>
     </header>

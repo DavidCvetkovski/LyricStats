@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { suggestArtists, type ArtistSuggestion } from "@/lib/api";
+import { getCachedArtistSuggestions, suggestArtists, type ArtistSuggestion } from "@/lib/api";
 import { artistKey } from "@/lib/utils";
 
 type Props = {
@@ -16,41 +16,11 @@ type Props = {
 
 // Sit on the latest keystroke this long before asking the API, so a fast
 // typist fires one request instead of one per letter.
-const DEBOUNCE_MS = 180;
+const DEBOUNCE_MS = 250;
 // Fetch a generous candidate set but only show the top few. The extra rows let
 // us narrow locally as the reader types more (no extra round-trips).
 const FETCH_LIMIT = 20;
 const SHOW = 8;
-
-// One cache for the whole session, shared across both search boxes. Keyed by
-// the aggressive match key; holds the *full* fetched list plus whether it was
-// the complete set (fewer than FETCH_LIMIT rows) — only complete sets are safe
-// to narrow from, since a capped list might hide a deeper match.
-type Entry = { items: ArtistSuggestion[]; complete: boolean };
-const cache = new Map<string, Entry>();
-
-/**
- * Resolve a query from cache alone, or null if a network fetch is needed.
- * Exact hit wins; otherwise narrow from the longest complete prefix we've
- * already fetched. Because "names containing `key`" ⊆ "names containing
- * `prefix`", filtering a complete prefix set yields the exact, complete answer.
- */
-function resolveFromCache(key: string): Entry | null {
-  const exact = cache.get(key);
-  if (exact) return exact;
-  for (let i = key.length - 1; i >= 2; i--) {
-    const anchor = cache.get(key.slice(0, i));
-    if (anchor?.complete) {
-      const items = anchor.items.filter((it) =>
-        artistKey(it.name).includes(key),
-      );
-      const entry: Entry = { items, complete: true };
-      cache.set(key, entry);
-      return entry;
-    }
-  }
-  return null;
-}
 
 /**
  * Artist search field with a dataset-backed dropdown. Wraps a plain `.field`
@@ -82,6 +52,9 @@ export function ArtistAutocomplete({
   const listId = useId();
 
   useEffect(() => {
+    // Cancel immediately when input changes, including during the next debounce
+    // window. Cleanup also prevents updates after navigating away.
+    abortRef.current?.abort();
     const q = value.trim();
     if (justPicked.current !== null && q === justPicked.current) return;
     justPicked.current = null;
@@ -94,6 +67,8 @@ export function ArtistAutocomplete({
       setOpen(false);
       return;
     }
+    // URL/localStorage restoration and parent updates do not need typeahead.
+    if (!isUserTyping.current) return;
 
     const show = (full: ArtistSuggestion[]) => {
       setItems(full.slice(0, SHOW));
@@ -104,23 +79,24 @@ export function ArtistAutocomplete({
     };
 
     // 1. Served entirely from cache (exact or narrowed) → instant, no network.
-    const cached = resolveFromCache(key);
+    const cached = getCachedArtistSuggestions(q, FETCH_LIMIT);
     if (cached) {
       abortRef.current?.abort();
-      show(cached.items);
+      show(cached);
       return;
     }
 
-    // 2. Debounced fetch. We deliberately keep the current rows on screen while
-    //    it's in flight, so the list never blanks mid-type.
+    // Keep matching rows during debounce, but never offer an unrelated result
+    // left over from an earlier query.
+    setItems((previous) => previous.filter((item) => artistKey(item.name).includes(key)));
+    setActive(-1);
+    // 2. Debounced fetch.
+    const ac = new AbortController();
+    abortRef.current = ac;
     const t = setTimeout(async () => {
-      abortRef.current?.abort();
-      const ac = new AbortController();
-      abortRef.current = ac;
       try {
         const found = await suggestArtists(q, FETCH_LIMIT, ac.signal);
         if (ac.signal.aborted) return;
-        cache.set(key, { items: found, complete: found.length < FETCH_LIMIT });
         show(found);
       } catch {
         // Network/abort error: leave whatever's showing in place rather than
@@ -128,7 +104,10 @@ export function ArtistAutocomplete({
       }
     }, DEBOUNCE_MS);
 
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      ac.abort();
+    };
   }, [value]);
 
   // Close when focus or a click lands outside the widget.
@@ -160,6 +139,7 @@ export function ArtistAutocomplete({
   }, []);
 
   function pick(name: string) {
+    abortRef.current?.abort();
     justPicked.current = name;
     isUserTyping.current = false;
     onChange(name);
@@ -213,7 +193,7 @@ export function ArtistAutocomplete({
         aria-expanded={open}
         aria-controls={listId}
         aria-autocomplete="list"
-        aria-activedescendant={active >= 0 ? `${listId}-${active}` : undefined}
+        aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined}
         autoComplete="off"
       />
 

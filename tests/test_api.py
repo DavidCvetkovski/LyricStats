@@ -7,13 +7,17 @@ catalogue payload, fuzzy suggestions, and the ingest auth guard.
 from __future__ import annotations
 
 import json
+import asyncio
 
 import pytest
 from fastapi import HTTPException
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from backend import main
 from backend.main import IngestSong
 from lyricstats import db
+from lyricstats import stats as song_stats
 
 
 def _add_dataset(name: str, song_count: int, songs=None) -> None:
@@ -58,6 +62,187 @@ def _add_lyrics_artist(name: str, n_songs: int, words: int = 30) -> None:
 
 def test_health():
     assert main.health()["ok"] is True
+
+
+@pytest.mark.parametrize("path", ["/api/song", "/api/artist/suggest"])
+def test_public_reads_have_bounded_browser_and_edge_cache(path):
+    request = Request(
+        {"type": "http", "method": "GET", "path": path, "query_string": b"", "headers": []}
+    )
+
+    async def respond(request):
+        return JSONResponse({"ok": True})
+
+    response = asyncio.run(main.cache_public_reads(request, respond))
+    assert response.headers["Cache-Control"] == "public, max-age=60"
+    assert (
+        response.headers["Vercel-CDN-Cache-Control"]
+        == "public, max-age=300, stale-while-revalidate=600"
+    )
+    assert response.headers["Vary"] == "Origin"
+
+
+@pytest.mark.parametrize(
+    "query,status",
+    [
+        (b"force=true", 200),
+        (b"force=1", 200),
+        (b"full=1", 200),
+        (b"cache_only=true", 200),
+        (b"", 404),
+        (b"", 500),
+    ],
+)
+def test_refreshes_and_errors_are_never_cached(query, status):
+    request = Request(
+        {"type": "http", "method": "GET", "path": "/api/song", "query_string": query, "headers": []}
+    )
+
+    async def respond(request):
+        return JSONResponse({"ok": status == 200}, status_code=status)
+
+    response = asyncio.run(main.cache_public_reads(request, respond))
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.headers["Vercel-CDN-Cache-Control"] == "no-store"
+
+
+# ── single-song fast paths ───────────────────────────────────────────────────
+
+
+def _no_provider(*args, **kwargs):
+    pytest.fail("A stored song must not call an external lyric provider")
+
+
+def test_song_serves_dataset_summary_without_provider_or_writes(temp_db, monkeypatch):
+    _add_dataset("Beyoncé", 1, [["Halo", 2008, 300, 150, 0.5, 0.2, 0.1, 1]])
+    monkeypatch.setattr(main.fetch, "fetch_song", _no_provider)
+    monkeypatch.setattr(db, "save_stats", _no_provider)
+    out = main.song(artist="beyonce", title="  HALO  ")
+    assert out["artist"] == "Beyoncé"
+    assert out["title"] == "Halo"
+    assert out["source"] == "dataset"
+    assert out["analysis_complete"] is False
+    assert out["has_sections"] is True
+    assert out["lyrics"] == ""
+    assert out["year"] == 2008
+    assert out["stats"]["word_count"] == 300
+    assert out["stats"]["unique_words"] == 150
+    assert out["stats"]["repetition_ratio"] == 0.1
+    assert db.get_artist("Beyoncé") is None
+
+
+@pytest.mark.parametrize("full", [False, True])
+def test_song_prefers_complete_cached_analysis_without_recomputing(temp_db, monkeypatch, full):
+    _add_dataset("Drake", 1, [["Halo", 2020, 300, 150, 0.5, 0.2, 0.1, 1]])
+    artist = db.get_or_create_artist("Drake")
+    saved = db.upsert_song(artist, title="Halo", lyrics="[Verse]\nhello world", year=2021)
+    db.save_stats(saved, song_stats.compute(saved.lyrics).to_dict())
+    monkeypatch.setattr(main.fetch, "fetch_song", _no_provider)
+    monkeypatch.setattr(main.stats, "compute", _no_provider)
+    out = main.song(artist="Drake", title="Halo", full=full)
+    assert out["source"] == "cache"
+    assert out["analysis_complete"] is True
+    assert out["stats"]["word_count"] == 2
+    assert out["year"] == 2021
+
+
+def test_song_resolves_canonical_artist_cache_before_summary(temp_db, monkeypatch):
+    _add_dataset("Beyoncé", 1, [["Halo", 2008, 300, 150, 0.5, 0.2, 0.1, 1]])
+    artist = db.get_or_create_artist("Beyoncé")
+    db.upsert_song(artist, title="Halo", lyrics="hello world")
+    monkeypatch.setattr(main.fetch, "fetch_song", _no_provider)
+    out = main.song(artist="beyonce", title="Halo")
+    assert out["source"] == "cache"
+    assert out["artist"] == "Beyoncé"
+
+
+def test_song_explicit_full_analysis_fetches_and_preserves_summary_on_miss(temp_db, monkeypatch):
+    _add_dataset("Drake", 1, [["Halo", 2020, 300, 150, 0.5, 0.2, 0.1, 1]])
+    calls = []
+
+    def unavailable(artist, title, *, force):
+        calls.append((artist, title, force))
+        raise main.fetch.FetchError("No lyrics available")
+
+    monkeypatch.setattr(main.fetch, "fetch_song", unavailable)
+    out = main.song(artist="Drake", title="Halo", force=True)
+    assert calls == [("Drake", "Halo", True)]
+    assert out["analysis_complete"] is False
+    assert out["stats"]["word_count"] == 300
+
+
+def test_song_full_analysis_does_not_force_provider_refresh(temp_db, monkeypatch):
+    _add_dataset("Drake", 1, [["Halo", 2020, 300, 150, 0.5, 0.2, 0.1, 1]])
+    calls = []
+
+    def unavailable(artist, title, *, force):
+        calls.append((artist, title, force))
+        raise main.fetch.FetchError("No lyrics available")
+
+    monkeypatch.setattr(main.fetch, "fetch_song", unavailable)
+    out = main.song(artist="Drake", title="Halo", full=True)
+    assert calls == [("Drake", "Halo", False)]
+    assert out["analysis_complete"] is False
+
+
+def test_song_cache_only_never_calls_provider_even_when_force_is_requested(temp_db, monkeypatch):
+    monkeypatch.setattr(main.fetch, "fetch_song", _no_provider)
+    with pytest.raises(HTTPException) as error:
+        main.song(artist="Unknown", title="Song", force=True, cache_only=True)
+    assert error.value.status_code == 404
+
+
+def test_song_does_not_confuse_original_with_remix(temp_db, monkeypatch):
+    _add_dataset("Drake", 1, [["Halo (Remix)", 2020, 300, 150, 0.5, 0.2, 0.1, 1]])
+    monkeypatch.setattr(main.fetch, "fetch_song", _no_provider)
+    with pytest.raises(HTTPException) as error:
+        main.song(artist="Drake", title="Halo", cache_only=True)
+    assert error.value.status_code == 404
+
+
+def test_song_keeps_normal_search_for_uncatalogued_songs(temp_db, monkeypatch):
+    calls = []
+
+    def available(artist, title, *, force):
+        calls.append((artist, title, force))
+        return main.fetch.FetchedSong(
+            artist=artist, title=title, lyrics="hello world", source="lrclib"
+        )
+
+    monkeypatch.setattr(main.fetch, "fetch_song", available)
+    out = main.song(artist="New Band", title="New Song")
+    assert calls == [("New Band", "New Song", False)]
+    assert out["analysis_complete"] is True
+    assert out["source"] == "lrclib"
+
+
+def test_song_whitespace_input_does_not_query_or_fetch(temp_db, monkeypatch):
+    monkeypatch.setattr(db, "find_song", _no_provider)
+    with pytest.raises(HTTPException) as error:
+        main.song(artist="  ", title="Song")
+    assert error.value.status_code == 422
+
+
+def test_autocomplete_uses_one_compact_read_without_lyrics(temp_db):
+    from sqlalchemy import event
+
+    _add_dataset("Drake", 100)
+    _add_lyrics_artist("Drake", 2)
+    statements = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(temp_db, "before_cursor_execute", capture)
+    try:
+        out = main.artist_suggest(q="dra", limit=8)
+    finally:
+        event.remove(temp_db, "before_cursor_execute", capture)
+    assert out == {"suggestions": [{"name": "Drake", "song_count": 100}]}
+    assert len(statements) == 1
+    assert "songs_json" not in statements[0]
+    assert "stats_json" not in statements[0]
+    assert "lyrics" not in statements[0]
 
 
 # ── dataset payload ──────────────────────────────────────────────────────────

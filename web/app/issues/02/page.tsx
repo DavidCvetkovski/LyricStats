@@ -1,0 +1,43 @@
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { Count, Reveal } from '@/components/EditorialMotion';
+const billboard='https://ca.billboard.com/music/chart-beat/justin-bieber-beauty-and-a-beat-still-global';
+const official='https://www.officialcharts.com/chart-news/sam-fender-olivia-dean-rein-me-in-song-of-the-summer-2026/';
+export const metadata:Metadata={title:'Issue 02 · The hit that wouldn’t stay in 2012',description:'Beauty and a Beat, the summer of the second life, and why an old release date no longer means an old song.',alternates:{canonical:'/issues/02'},openGraph:{title:'Issue 02 · The hit that wouldn’t stay in 2012',description:'Beauty and a Beat and the summer of the second life.',url:'/issues/02',type:'article'}};
+export default function IssueTwo(){return <article className="mx-auto max-w-6xl px-4 sm:px-6 py-10 sm:py-14">
+ <Link href="/issues" className="issue-breadcrumb">← All issues</Link>
+ <header className="border-b-4 border-double border-rule-strong pb-10">
+  <div className="smallcaps flex justify-between flex-wrap gap-3"><span className="text-accent">Issue 02 · The second life</span><span>14 September 2026</span></div>
+  <h1 className="display leading-[.98] mt-8 max-w-5xl" style={{fontSize:'clamp(3.4rem,9vw,7rem)'}}>The hit that wouldn’t<br className="hidden sm:block"/> stay in <em className="text-accent">2012.</em></h1>
+  <p className="font-serif italic text-xl sm:text-3xl leading-relaxed text-ink-soft max-w-3xl mt-8">A festival can bring a song back. Keeping it there is another story. This summer, pop’s past became its present tense.</p>
+  <div className="flex gap-5 flex-wrap mt-8 smallcaps"><a className="reading-link" href="https://open.spotify.com/search/Justin%20Bieber%20Beauty%20and%20a%20Beat" target="_blank" rel="noopener noreferrer">Listen on Spotify ↗</a><Link prefetch={false} className="reading-link" href="/song?artist=Justin%20Bieber&title=Beauty%20and%20a%20Beat">Read the song →</Link></div>
+ </header>
+ <Reveal className="grid sm:grid-cols-[1fr_auto_1fr] items-center gap-6 py-12 sm:py-20 border-b border-rule-strong">
+  <div><p className="smallcaps">The release</p><p className="figure" style={{fontSize:'clamp(4rem,13vw,9rem)'}}>2012</p></div><span className="font-serif italic text-4xl text-ink-mute" aria-hidden>→</span><div><p className="smallcaps text-accent">The return</p><p className="figure text-accent" style={{fontSize:'clamp(4rem,13vw,9rem)'}}>2026</p></div>
+  <p className="sm:col-span-3 font-serif italic text-lg text-ink-soft">“Beauty and a Beat” · Justin Bieber featuring Nicki Minaj</p>
+ </Reveal>
+ <div className="grid lg:grid-cols-[1.7fr_1fr] gap-12 lg:gap-20 mt-12">
+  <div className="font-serif text-lg leading-[1.85] text-ink-soft space-y-7">
+   <p className="dropcap">A release date is an address in the archive. It tells us where to file a song, but increasingly little about when somebody will first hear it. The interesting question this summer was not whether an old hit could return. It was whether the return could become a life of its own.</p>
+   <p>After Bieber’s April Coachella appearances, “Beauty and a Beat” surged. By the chart dated 29 August, it was still fifth on the Billboard Global 200, with 30.4 million worldwide streams in the week ending 20 August. Its run in the Global Excl. U.S. top ten had reached nineteen consecutive weeks. <a className="reading-link" href={billboard}>Billboard’s report ↗</a></p>
+   <h2 className="display text-4xl text-ink pt-5">The spark and the staying power</h2>
+   <p>A comeback has two clocks. One measures the burst of attention: a performance, a clip, a sudden reminder. The other measures what happens after the reminder has stopped feeling new. The first explains a spike. The second asks whether people still choose the song.</p>
+   <p>The chart cannot tell us which listeners remember 2012 and which have just discovered it. Calling the whole thing nostalgia would flatten those experiences into one. For a returning fan, the track carries a previous summer. For a first-time listener, there may be no previous summer attached.</p>
+   <blockquote className="font-serif text-3xl sm:text-4xl italic leading-snug text-ink border-y border-rule-strong py-8 my-10">The recording has an age.<br/>The discovery does not.</blockquote>
+   <h2 className="display text-4xl text-ink pt-4">A second chance can be a bigger one</h2>
+   <p>In Britain, the track surpassed its original No. 16 peak to reach No. 3 in 2026. Official Charts also identifies two other catalogue returns in its summer report: The Chemical Brothers’ “Go,” boosted by Netflix’s <em>Apex</em>, and Oasis’s “Wonderwall,” connected to England’s World Cup summer. <a className="reading-link" href={official}>Official Charts’ summer review ↗</a></p>
+   <p>These are different routes back into circulation. That matters. “Old music is popular” is too broad to explain much; a film placement, a sporting ritual and a festival appearance are different ways of making a song feel relevant to the moment.</p>
+   <h2 className="display text-4xl text-ink pt-4">What survives the return?</h2>
+   <p>Here is a listening experiment: separate the event that led you to a song from the details that make you replay it. Follow the recurring lines. Notice when the vocabulary stops expanding, and when a late verse introduces something new. A familiar hook may be the doorway; it need not be the entire room.</p>
+   <p>LyricStats can show those patterns in the text. It cannot prove why a record goes viral, or reduce the recording to its words. Read the shape, then return to the sound. What changes on the second listen?</p>
+   <div className="flex gap-3 flex-wrap border-t border-rule pt-7"><Link className="pill" prefetch={false} href="/song?artist=Justin%20Bieber&title=Beauty%20and%20a%20Beat">Explore the returning hit →</Link><Link className="pill pill-ghost" href="/song?mode=text">Bring your own text →</Link></div>
+  </div>
+  <aside className="space-y-10">
+   <Reveal className="border-y border-rule-strong py-7"><p className="smallcaps">The Coachella surge</p><p className="figure text-accent mt-6" style={{fontSize:'clamp(4rem,8vw,6rem)'}}>+<Count value={824}/>%</p><p className="font-serif italic text-xl mt-3">growth in worldwide streams</p><p className="text-xs leading-relaxed text-ink-mute mt-5">Weeks ending 9 April → 23 April 2026. A percentage increase, not the share of listeners who were new. <a className="reading-link" href={billboard}>Source: Billboard / Luminate</a></p></Reveal>
+   <Reveal className="border border-rule-strong p-6 sm:p-8"><p className="smallcaps">Where the replay lives</p><p className="figure text-accent text-7xl mt-6"><Count value={83}/>%</p><p className="font-serif italic text-xl mt-3">of streams came from outside the U.S.</p><div className="flex h-5 mt-7" aria-hidden><span className="bg-accent w-[83%]"/><span className="bg-ink w-[17%]"/></div><p className="flex justify-between text-xs mt-3"><span>Outside U.S. · 83%</span><span>U.S. · 17%</span></p><p className="text-xs leading-relaxed text-ink-mute mt-6">Week ending 20 August 2026. <a className="reading-link" href={billboard}>Source: Billboard / Luminate</a></p></Reveal>
+   <section><p className="smallcaps border-b border-rule-strong pb-4">Three routes back</p>{[['Justin Bieber','Beauty and a Beat','A festival stage'],['The Chemical Brothers','Go','A film soundtrack'],['Oasis','Wonderwall','A football summer']].map(([a,t,why])=><Link prefetch={false} key={t} href={`/song?${new URLSearchParams({artist:a,title:t})}`} className="block py-5 border-b border-rule hover:text-accent"><p className="smallcaps text-ink-mute">{why}</p><p className="display text-3xl mt-2">{t} →</p><p className="font-serif italic mt-2">{a}</p></Link>)}</section>
+   <section className="text-sm text-ink-mute leading-relaxed"><h2 className="smallcaps text-ink mb-4">The evidence, dated</h2><p>This is an editorial reading of published chart reporting, not a live chart or a LyricStats streaming measurement. Weekly global streams, national chart positions and seasonal rankings cover different populations and periods. They should not be compared as one scale.</p><p className="mt-4">No claim here identifies an individual listener’s age or motive. The argument about discovery is our interpretation. Song analysis opens separately and depends on the available transcription.</p></section>
+   <Link href="/issues/01" className="block border-t border-rule-strong pt-6"><span className="smallcaps">From the archive · Issue 01</span><span className="display text-2xl block mt-3">The Monsters of Sarajevo →</span></Link>
+  </aside>
+ </div>
+</article>}

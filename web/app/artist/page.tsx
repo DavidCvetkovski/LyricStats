@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   getArtistPool,
@@ -21,6 +21,8 @@ import { ErrorNote } from "@/components/ErrorNote";
 import { artistCache } from "@/lib/cache";
 import { titleCase } from "@/lib/utils";
 import { ArtistAutocomplete } from "@/components/ArtistAutocomplete";
+import { MusicLinks } from "@/components/MusicLinks";
+import { verifiedMotif } from "@/lib/artistEvidence";
 
 const NON_NOUNS = new Set([
   // Auxiliary / Modal / Pronouns / Stop-words
@@ -40,11 +42,6 @@ const NON_NOUNS = new Set([
   "ljubav", "srce", "duša", "oči", "noć", "dan", "život", "suze", "bol", "tuga", "pesma", "pjesma", "sreća", "zora", "nebo", "balkan"
 ]);
 
-// @ts-expect-error - wink-pos-tagger has no typescript definitions
-import posTagger from "wink-pos-tagger";
-
-const tagger = posTagger();
-
 const AD_LIBS = new Set(["ooh", "ah", "oh", "uh", "la", "da", "na", "hey", "whoa", "yeh", "yeah", "imma", "yes", "no"]);
 
 function getTopNoun(
@@ -63,24 +60,8 @@ function getTopNoun(
     // Sort by highest score
     scoredWords.sort((a, b) => b.score - a.score);
 
-    // Find the first valid Noun that isn't a cliche
-    for (const item of scoredWords) {
-      if (item.word.length <= 2) continue;
-      if (item.word.includes("'") || item.word.includes("’")) continue;
-      if (NON_NOUNS.has(item.cleanWord)) continue;
-
-      const tags = tagger.tagSentence(item.word);
-      if (tags.length > 0) {
-        const pos = tags[0].pos;
-        // Accept Nouns and Plural Nouns. Reject Proper Nouns (names like 'Buba' or 'Karli')
-        if (pos === 'NN' || pos === 'NNS') {
-          return [item.word, item.count];
-        }
-      }
-    }
-
-    // Fallback: If no nouns found (often happens for Balkan artists due to English ML tagger),
-    // just return the mathematically highest scoring word that isn't a cliche!
+    // Signature scores are already precomputed. A small language-neutral filter
+    // avoids downloading and initializing an English tagging dictionary.
     for (const item of scoredWords) {
       if (item.word.length <= 2) continue;
       if (item.word.includes("'") || item.word.includes("’")) continue;
@@ -95,7 +76,7 @@ function getTopNoun(
     for (const [w, c] of topWordsNoStop) {
       if (w.length <= 2) continue;
       if (w.includes("'") || w.includes("’")) continue;
-      
+
       const cleanWord = w.replace(/['’]/g, "").toLowerCase();
       if (!NON_NOUNS.has(cleanWord)) {
         return [w, c];
@@ -113,24 +94,8 @@ function getTopNoun(
 
 function getTopFreqNoun(topWordsNoStop?: [string, number][] | null): [string, number] | null {
   if (!topWordsNoStop || topWordsNoStop.length === 0) return null;
-  
-  for (const [w, c] of topWordsNoStop) {
-    if (w.length <= 2) continue;
-    if (w.includes("'") || w.includes("’")) continue;
-    
-    const cleanWord = w.replace(/['’]/g, "").toLowerCase();
-    if (AD_LIBS.has(cleanWord)) continue;
-    
-    const tags = tagger.tagSentence(w);
-    if (tags.length > 0) {
-      const pos = tags[0].pos;
-      if (pos === 'NN' || pos === 'NNS') {
-        return [w, c];
-      }
-    }
-  }
-  
-  // Desperate fallback for non-English artists where tagger fails
+
+  // Use the stored frequency order, omitting the existing ad-lib list.
   for (const [w, c] of topWordsNoStop) {
     if (w.length <= 2) continue;
     if (w.includes("'") || w.includes("’")) continue;
@@ -138,14 +103,14 @@ function getTopFreqNoun(topWordsNoStop?: [string, number][] | null): [string, nu
     if (AD_LIBS.has(cleanWord)) continue;
     return [w, c];
   }
-  
+
   for (const [w, c] of topWordsNoStop) {
     if (!w.includes("'") && !w.includes("’")) {
       const cleanWord = w.replace(/['’]/g, "").toLowerCase();
       if (!AD_LIBS.has(cleanWord)) return [w, c];
     }
   }
-  
+
   return topWordsNoStop.length > 0 ? topWordsNoStop[0] : null;
 }
 
@@ -158,7 +123,6 @@ export default function ArtistPage() {
 }
 
 function ArtistPageInner() {
-  const router = useRouter();
   const params = useSearchParams();
 
   const urlName = params.get("name") ?? "";
@@ -200,6 +164,10 @@ function ArtistPageInner() {
 
   const run = useCallback(async (n: string, m: number, sh: string) => {
     if (!n) return;
+    // A cached search must also cancel the previous request, otherwise that
+    // older response can overwrite the artist the reader just returned to.
+    abortRef.current?.abort();
+    abortRef.current = null;
     const key = `${n}|${m}|${sh}`;
     const cachedData = artistCache.get(key);
     if (cachedData) {
@@ -208,10 +176,9 @@ function ArtistPageInner() {
       setProgress(null);
       setError(null);
       setSuggestion(null);
+      saveLastArtist({ name: n, min: m, preferCache: true });
       return;
     }
-    // Abort any in-flight run so a new search never gets stuck behind it.
-    abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
     const { signal } = ac;
@@ -225,6 +192,7 @@ function ArtistPageInner() {
       // 1. Plan: resolve + sample on Genius. If the cache already holds
       //    enough, to_fetch comes back empty and we skip straight to stats.
       const pool = await getArtistPool(n, m, false, sh, signal);
+      if (signal.aborted) return;
       // Typo with no exact match but a close dataset artist → offer it and stop.
       if (pool.suggestion) {
         if (signal.aborted) return;
@@ -265,6 +233,15 @@ function ArtistPageInner() {
     }
   }, []);
 
+  useEffect(() => () => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      // React may replay mount effects in development. Let the URL effect
+      // restart a cancelled initial request instead of treating it as loaded.
+      lastKey.current = "";
+    }
+  }, []);
+
   useEffect(() => {
     if (urlName) {
       const key = `${urlName}|${urlMin}|${urlShuffle}`;
@@ -285,20 +262,20 @@ function ArtistPageInner() {
   const examine = useCallback(
     (n: string) => {
       if (!n) return;
-      // Fresh shuffle token on every search → new random sample.
-      const shuffle = Math.random().toString(36).slice(2, 10);
+      // The page requests the whole catalogue. A stable key lets repeat
+      // searches reuse that result instead of creating a new API request.
+      const shuffle = "";
       // Mark this key as handled so the URL change below doesn't double-run,
       // then kick the search off directly (don't depend on param reactivity).
       lastKey.current = `${n}|${min}|${shuffle}`;
       const q = new URLSearchParams({
         name: n,
         min: String(min),
-        shuffle,
       }).toString();
-      router.push(`/artist?${q}`);
+      window.history.pushState(null, "", `/artist?${q}`);
       run(n, min, shuffle);
     },
-    [min, router, run],
+    [min, run],
   );
 
   function onSubmit(e: React.FormEvent) {
@@ -316,9 +293,7 @@ function ArtistPageInner() {
         >
           A career, in figures.
         </h2>
-        <p className="mt-3 font-serif italic text-lg sm:text-xl text-ink-soft max-w-2xl">
-          Pull a catalogue from the wires. Read it as a single body of work.
-        </p>
+
       </header>
 
       <form
@@ -378,10 +353,10 @@ function ArtistPageInner() {
             onClick={() => {
               setName(suggestion);
               setSuggestion(null);
-              const shuffle = Math.random().toString(36).slice(2, 10);
+              const shuffle = "";
               lastKey.current = `${suggestion}|${min}|${shuffle}`;
-              router.push(
-                `/artist?${new URLSearchParams({ name: suggestion, min: String(min), shuffle }).toString()}`,
+              window.history.pushState(null, "",
+                `/artist?${new URLSearchParams({ name: suggestion, min: String(min) }).toString()}`,
               );
               run(suggestion, min, shuffle);
             }}
@@ -428,10 +403,10 @@ function ArtistView({ data }: { data: ArtistPayload }) {
         const progress = Math.min(elapsed / duration, 1);
 
         // Ease-in-out Quart (distinct acceleration, fast middle, gentle slow down)
-        const eased = progress < 0.5 
-          ? 8 * Math.pow(progress, 4) 
+        const eased = progress < 0.5
+          ? 8 * Math.pow(progress, 4)
           : 1 - Math.pow(-2 * progress + 2, 4) / 2;
-          
+
         window.scrollTo(0, startY + distance * eased);
 
         if (progress < 1) {
@@ -490,13 +465,14 @@ function ArtistView({ data }: { data: ArtistPayload }) {
   const hasSections = data.has_sections ?? data.songs.some((song) => song.has_sections);
   // Dataset aggregates have no per-song catalogue to show.
   const hasCatalogue = data.songs.length > 0;
+  const motif = verifiedMotif(data);
   const topNoun = getTopNoun(s.signature_words, s.top_words_no_stop);
   const topFreqNoun = getTopFreqNoun(s.top_words_no_stop);
 
   return (
     <article ref={containerRef} className="mt-16 rise">
       <header className="text-center border-b border-rule-strong pb-12">
-        <p className="smallcaps mb-3">A Reader</p>
+
         <h1
           className="display text-ink"
           style={{ fontSize: "clamp(3rem, 10vw, 8rem)" }}
@@ -507,6 +483,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
           {s.song_count} songs · {s.total_words.toLocaleString()} words ·{" "}
           {s.total_unique_words.toLocaleString()} distinct
         </p>
+        <MusicLinks artist={data.name} />
         {data.limited && (
           <p className="mt-2 text-[0.72rem] uppercase tracking-[0.18em] text-ink-mute">
             Limited view — this artist isn’t in our dataset, so only{" "}
@@ -526,8 +503,8 @@ function ArtistView({ data }: { data: ArtistPayload }) {
       </header>
 
 
-      <ArtistStory 
-        artistName={data.name} 
+      <ArtistStory
+        artistName={data.name}
         stats={s}
         topFreqNoun={topFreqNoun}
       />
@@ -541,24 +518,24 @@ function ArtistView({ data }: { data: ArtistPayload }) {
             if (!topNoun) return null;
             return (
               <div className="grid md:grid-cols-[auto_auto_auto] gap-8 md:gap-20 items-start justify-center w-full">
-                
+
                 {/* Left Side: Quote Pull (Top Left) */}
                 <div className="flex flex-col max-w-xs opacity-80 pt-2">
                   <blockquote className="relative pt-4">
                     <span className="absolute top-0 left-0 text-7xl text-rule font-serif leading-none -ml-5 mt-1">"</span>
                     <p className="relative z-10 font-serif italic text-lg leading-snug text-ink-soft">
-                      {s.motif_quote ? (
-                        s.motif_quote.quote.split(new RegExp(`(${s.motif_quote.word})`, 'gi')).map((part, i) => 
-                          part.toLowerCase() === s.motif_quote!.word.toLowerCase() 
-                            ? <span key={i} className="text-[#B4995F] font-medium">{part}</span> 
+                      {motif ? (
+                        motif.quote.split(new RegExp(`(${motif.word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, 'gi')).map((part, i) =>
+                          part.toLowerCase() === motif!.word.toLowerCase()
+                            ? <span key={i} className="text-[#B4995F] font-medium">{part}</span>
                             : part
                         )
                       ) : (
-                        <>This is an example lyric where they use the word <span className="text-[#B4995F] font-medium">{topNoun[0]}</span> to devastating effect.</>
+                        <>The word <span className="text-[#B4995F] font-medium">{topNoun[0]}</span> appears {topNoun[1].toLocaleString()} times in this catalogue.</>
                       )}
                     </p>
                     <div className="mt-4 text-xs uppercase tracking-widest text-ink-mute">
-                      — {s.motif_quote ? s.motif_quote.song_title : "Song Name"}
+                      — {motif ? motif.song_title : "From the word counts"}
                     </div>
                   </blockquote>
                 </div>
@@ -566,20 +543,20 @@ function ArtistView({ data }: { data: ArtistPayload }) {
                 {/* Center: The Motif (Noun) - Pushed Down */}
                 <div className="flex flex-col justify-center items-start md:items-end md:text-right pt-6 md:mt-32 md:-translate-x-6">
                   <div className="smallcaps text-ink-mute mb-4 md:mb-6">The Signature</div>
-                  <div className="text-7xl sm:text-8xl lg:text-[7rem] leading-none font-serif italic text-[#B4995F] tracking-tight mb-6">
-                    {(s.motif_quote?.word || topNoun[0]).toLowerCase()}
+                  <div translate="no" className="notranslate text-7xl sm:text-8xl lg:text-[7rem] leading-none font-serif italic text-[#B4995F] tracking-tight mb-6">
+                    {(motif?.word || topNoun[0]).toLowerCase()}
                   </div>
                   <p className="font-serif italic text-ink-soft text-lg sm:text-xl max-w-[280px]">
-                    An undeniable lyrical fingerprint uniquely woven throughout their catalogue.
+                    A word that stands out in the stored vocabulary. Its frequency is measured; its meaning is yours to read.
                   </p>
                 </div>
 
                 {/* Right Side: The Lyrical Staples (Table) */}
                 <div className="w-full max-w-xl mx-auto md:mx-0">
-                  <WordTable 
-                    title="Lyrical Staples" 
-                    rows={s.top_words_no_stop?.filter(w => !w[0].includes("'") && !w[0].includes("’") && !AD_LIBS.has(w[0].toLowerCase()))} 
-                    motifWord={topNoun[0]} 
+                  <WordTable
+                    title="Lyrical Staples"
+                    rows={s.top_words_no_stop?.filter(w => !w[0].includes("'") && !w[0].includes("’") && !AD_LIBS.has(w[0].toLowerCase()))}
+                    motifWord={topNoun[0]}
                   />
                 </div>
               </div>
@@ -597,7 +574,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
           >
             The Catalogue
           </h3>
-          
+
           <div className="flex gap-4 items-center w-full sm:w-auto">
             {/* Search Box */}
             <input
@@ -607,7 +584,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
-            
+
             {/* Mobile-only Sort Dropdown */}
             <div className="sm:hidden">
               <select
@@ -702,6 +679,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
               <div className="min-w-0">
                 <Link
                   href={`/song?artist=${encodeURIComponent(data.name)}&title=${encodeURIComponent(song.title)}`}
+                  prefetch={false}
                   className="font-serif text-lg sm:text-xl text-ink hover:text-accent transition-colors leading-tight break-words hover:underline decoration-rule underline-offset-4 hover:decoration-accent"
                 >
                   {song.title}
@@ -778,4 +756,3 @@ function Mini({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-

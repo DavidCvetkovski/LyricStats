@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from lyricstats import db
 from lyricstats.db import normalize_key
 
@@ -190,6 +192,39 @@ def test_upsert_and_find_song(temp_db):
     assert found is not None
     assert found.lyrics == "hello world hello"
     assert len(db.list_songs(a)) == 1
+
+
+def test_find_song_matches_literal_wildcards_and_uses_one_read(temp_db):
+    from sqlalchemy import event
+
+    artist = db.get_or_create_artist("Artist")
+    db.upsert_song(artist, title="1000", lyrics="wrong song")
+    db.upsert_song(artist, title="100%", lyrics="the requested song")
+    statements = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(temp_db, "before_cursor_execute", capture)
+    try:
+        result = db.find_song("ARTIST", "100%")
+    finally:
+        event.remove(temp_db, "before_cursor_execute", capture)
+    assert result.title == "100%"
+    assert result.lyrics == "the requested song"
+    assert len(statements) == 1
+    assert db.find_song("Artist", "100_") is None
+
+
+@pytest.mark.parametrize("title", ["Šta će biti", "Émotion", "Љубов"])
+def test_find_song_preserves_exact_unicode_titles(temp_db, title):
+    artist = db.get_or_create_artist("Artist")
+    db.upsert_song(artist, title=title, lyrics="the requested song")
+
+    found = db.find_song("artist", f"  {title}  ")
+
+    assert found is not None
+    assert found.title == title
 
 
 def test_upsert_song_replaces_lyrics_and_invalidates_stats(temp_db):

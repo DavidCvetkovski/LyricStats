@@ -28,7 +28,10 @@ export type SongPayload = {
   title: string;
   album: string | null;
   year: number | null;
-  source: "cache" | "genius" | "lrclib" | "ovh";
+  source: "cache" | "genius" | "lrclib" | "ovh" | "dataset" | "local";
+  /** False for a catalogue summary; only its five stored metrics are available. */
+  analysis_complete?: boolean;
+  has_sections?: boolean;
   lyrics: string;
   stats: SongStats;
 };

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 
 // The song page is a client component, so its metadata lives here.
 export const metadata: Metadata = {
-  title: "Song Statistics",
+  title: "A Close Reading",
   description:
-    "Pick a song and read its statistics: unique words, lexical variety, repetition, chorus share and the words it leans on most.",
+    "Explore a song’s returning lines, written shape and unfolding vocabulary. Search for a song or read your own text privately in your browser.",
   alternates: {
     canonical: "/song",
   },
@@ -12,9 +12,9 @@ export const metadata: Metadata = {
     siteName: "LyricStats",
     type: "website",
     url: "/song",
-    title: "Song Statistics · LyricStats",
+    title: "A Close Reading · LyricStats",
     description:
-      "Pick a song and read its statistics: unique words, lexical variety, repetition, chorus share and the words it leans on most.",
+      "Explore a song’s returning lines, written shape and unfolding vocabulary. Search for a song or read your own text privately in your browser.",
   },
 };
 

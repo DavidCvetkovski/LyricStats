@@ -13,9 +13,9 @@ import builtins
 import json
 import logging
 import random
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -47,6 +47,36 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def cache_public_reads(request: Request, call_next):
+    """Cache small public reads; explicit refreshes and errors stay uncached.
+
+    Vercel consumes its separate CDN header, allowing repeated lookups to skip
+    the Python function while browsers keep a shorter freshness window.
+    """
+    response = await call_next(request)
+    if request.url.path not in {"/api/song", "/api/artist/suggest"}:
+        return response
+    explicit_read = any(
+        request.query_params.get(key, "").lower() in {"1", "true", "yes", "on", "t", "y"}
+        for key in ("force", "full", "cache_only")
+    )
+    if request.method == "GET" and response.status_code == 200 and not explicit_read:
+        response.headers["Cache-Control"] = "public, max-age=60"
+        response.headers["Vercel-CDN-Cache-Control"] = (
+            "public, max-age=300, stale-while-revalidate=600"
+        )
+        # CORS reflects allowed origins. Include Origin even on requests with
+        # no Origin header so that response cannot hide a later CORS variant.
+        vary = {value.strip().lower() for value in response.headers.get("Vary", "").split(",")}
+        if "origin" not in vary:
+            response.headers.add_vary_header("Origin")
+    else:
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Vercel-CDN-Cache-Control"] = "no-store"
+    return response
 
 
 @app.get("/health")
@@ -101,28 +131,56 @@ def ingest(song: IngestSong, x_seed_key: str = Header(default="")) -> dict[str, 
 
 @app.get("/api/song")
 def song(
-    artist: str = Query(..., min_length=1),
-    title: str = Query(..., min_length=1),
-    force: bool = Query(False),
+    artist: Annotated[str, Query(min_length=1, max_length=120)],
+    title: Annotated[str, Query(min_length=1, max_length=300)],
+    force: bool = False,
+    full: bool = False,
+    cache_only: bool = False,
 ) -> dict[str, Any]:
+    """Serve stored analysis first; provider requests are only needed on a miss.
+
+    Dataset catalogues contain useful song statistics even when full lyrics
+    are unavailable. Expose their limited coverage explicitly so the browser
+    can show an instant summary and offer full analysis as a separate action.
+    ``full`` requests lyrics while preserving the existing full-lyrics cache;
+    ``force`` explicitly refreshes those lyrics. ``cache_only`` prevents all
+    provider calls, including when either of the other options is requested.
+    """
+    artist, title = artist.strip(), title.strip()
+    if not artist or not title:
+        raise HTTPException(status_code=422, detail="Enter an artist and song title.")
+
+    db_song = db.find_song(artist, title)
+    if db_song and db_song.lyrics.strip() and (not force or cache_only):
+        return _song_payload(artist, db_song, source="cache")
+
+    agg = db.get_artist_aggregate(artist)
+    # Artist punctuation/accent aliases may resolve to a canonical cache name.
+    if agg and agg.name != artist.lower():
+        canonical_song = db.find_song(agg.name, title)
+        if canonical_song and canonical_song.lyrics.strip() and (not force or cache_only):
+            return _song_payload(agg.display_name, canonical_song, source="cache")
+    summary = _dataset_song_payload(agg, title) if agg else None
+    if summary and (not (force or full) or cache_only):
+        return summary
+    if cache_only:
+        raise HTTPException(status_code=404, detail=f"No stored analysis for '{artist} — {title}'.")
+
     try:
         s = fetch.fetch_song(artist, title, force=force)
     except fetch.FetchError as e:
+        if summary:
+            return summary
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001
         log.exception("song fetch failed")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
     db_song = db.find_song(s.artist, s.title)
-    cached = db.load_stats(db_song) if db_song else None
-    # Migrate old caches that pre-date new fields (e.g. section_sequence)
-    if cached and "section_sequence" in cached:
-        st = stats.SongStats.from_dict(cached)
-    else:
-        st = stats.compute(s.lyrics)
-        if db_song:
-            db.save_stats(db_song, st.to_dict())
-
+    if db_song:
+        return _song_payload(s.artist, db_song, source=s.source)
+    # A provider adapter may return lyrics without persisting them.
+    st = stats.compute(s.lyrics)
     return {
         "artist": s.artist,
         "title": s.title,
@@ -131,7 +189,65 @@ def song(
         "source": s.source,
         "lyrics": s.lyrics,
         "stats": st.to_dict(),
+        "analysis_complete": True,
+        "has_sections": any(k != "other" for k in st.section_kinds),
     }
+
+
+def _song_payload(artist: str, song: db.Song, *, source: str) -> dict[str, Any]:
+    cached = db.load_stats(song)
+    # Migrate old caches that pre-date new fields (e.g. section_sequence)
+    if cached and "section_sequence" in cached:
+        st = stats.SongStats.from_dict(cached)
+    else:
+        st = stats.compute(song.lyrics)
+        db.save_stats(song, st.to_dict())
+    return {
+        "artist": artist,
+        "title": song.title,
+        "album": song.album,
+        "year": song.year,
+        "source": source,
+        "lyrics": song.lyrics,
+        "stats": st.to_dict(),
+        "analysis_complete": True,
+        "has_sections": any(k != "other" for k in st.section_kinds),
+    }
+
+
+def _dataset_song_payload(agg: db.ArtistAggregate, title: str) -> dict[str, Any] | None:
+    """Match a stored title without guessing between remixes or versions."""
+    try:
+        rows = json.loads(agg.songs_json or "[]")
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(rows, list):
+        return None
+    for row in rows:
+        if not isinstance(row, list) or len(row) != 8 or not isinstance(row[0], str):
+            continue
+        stored_title, year, wc, uniq, ttr, chorus, repetition, has_sections = row
+        if stored_title.strip().casefold() != title.casefold():
+            continue
+        st = stats.SongStats(
+            word_count=wc,
+            unique_words=uniq,
+            type_token_ratio=ttr,
+            chorus_ratio=chorus,
+            repetition_ratio=repetition,
+        )
+        return {
+            "artist": agg.display_name,
+            "title": stored_title,
+            "album": None,
+            "year": year,
+            "source": "dataset",
+            "lyrics": "",
+            "stats": st.to_dict(),
+            "analysis_complete": False,
+            "has_sections": bool(has_sections),
+        }
+    return None
 
 
 # ── artist ──────────────────────────────────────────────────────────────────
@@ -312,12 +428,10 @@ def artist_suggest(
     artists, returning display names plus catalogue size to disambiguate.
     """
     rows = db.search_artist_aggregates(q, limit=limit)
-    suggestions = []
-    for r in rows:
-        lb = db.get_artist(r.name)
-        count = _get_merged_song_count(r, lb)
-        suggestions.append({"name": r.display_name, "song_count": count})
-    return {"suggestions": suggestions}
+    # The precomputed count is enough to disambiguate search results. Loading
+    # every catalogue and its cached lyrics here multiplied DB transfer on
+    # every keystroke; the artist page still reports the merged live count.
+    return {"suggestions": [{"name": r.display_name, "song_count": r.song_count} for r in rows]}
 
 
 @app.get("/api/artist/pool")
@@ -344,7 +458,6 @@ def artist_pool(
 
     # 1. We fast-return if we ALREADY have enough songs (dataset + cache) to satisfy
     #    the user's request `min`, OR if we have exhausted everything Genius has.
-    cached_songs = db.list_songs(existing) if existing else []
     exhausted = (
         existing is not None
         and existing.total_songs is not None
@@ -383,9 +496,7 @@ def artist_pool(
         }
 
     try:
-        a, sample = fetch.resolve_and_sample(
-            name, min, pool_size=min, shuffle_seed=shuffle or None
-        )
+        a, sample = fetch.resolve_and_sample(name, min, pool_size=min, shuffle_seed=shuffle or None)
     except fetch.FetchError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001

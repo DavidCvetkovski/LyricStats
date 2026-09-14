@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { ImageResponse } from "next/og";
 
 export const alt =
-  "LyricStats · A quarterly statistical review of popular lyrics";
+  "LyricStats · Lyric statistics for songs and artists";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -64,17 +64,7 @@ export default async function Image() {
             marginBottom: 32,
           }}
         />
-        <div
-          style={{
-            fontSize: 25,
-            color: INK_SOFT,
-            letterSpacing: 5,
-            textTransform: "uppercase",
-            textAlign: "center",
-          }}
-        >
-          A Quarterly Statistical Review of Popular Lyrics
-        </div>
+
         <div
           style={{
             fontSize: 26,
@@ -84,7 +74,7 @@ export default async function Image() {
             marginTop: 28,
           }}
         >
-          Issue 01 · The Monsters of Sarajevo
+          Songs · Artists · Words
         </div>
       </div>
     ),

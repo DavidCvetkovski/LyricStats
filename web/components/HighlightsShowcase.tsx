@@ -20,7 +20,7 @@ export function HighlightsShowcase({ stats }: Props) {
 
   return (
     <section className="mt-20 mb-20">
-      <div className="overflow-hidden bg-transparent py-8 border-y border-rule-strong animate-in fade-in duration-1000">
+      <div className="overflow-hidden bg-transparent py-8 border-y border-rule-strong animate-in fade-in duration-1000 mask-edges">
         <style dangerouslySetInnerHTML={{__html: `
           @keyframes marquee {
             0% { transform: translateX(0); }
@@ -29,9 +29,13 @@ export function HighlightsShowcase({ stats }: Props) {
           .animate-marquee-slow {
             animation: marquee 60s linear infinite;
           }
+          .mask-edges {
+            mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent);
+            -webkit-mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent);
+          }
         `}} />
-        <div className="flex whitespace-nowrap animate-marquee-slow w-max hover:[animation-play-state:paused] mask-edges">
-          {[1, 2, 3].map((group) => (
+        <div className="flex whitespace-nowrap animate-marquee-slow w-max hover:[animation-play-state:paused]">
+          {[1, 2].map((group) => (
             <div key={group} className="flex items-center gap-24 px-12">
               <AiryItem label="Shortest Song" title={shortestTitle} value={`${shortestWords} words`} />
               <span className="text-ink-mute/30">|</span>

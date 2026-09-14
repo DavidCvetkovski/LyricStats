@@ -25,9 +25,9 @@ const mono = JetBrains_Mono({
 });
 
 const DESCRIPTION =
-  "A quarterly statistical review of popular lyrics. We count every word, " +
-  "rhyme and chorus to read songs and artists as data. In Issue 01: The " +
-  "Monsters of Sarajevo, on Jala Brat & Buba Corelli's album GODZILLA.";
+  "Explore songs and artists through their words, lines and repetitions. " +
+  "Read Issue 02: " +
+  "The hit that wouldn’t stay in 2012, on pop’s second lives.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -93,7 +93,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
         <Masthead />
-        <main className="flex-1 w-full">{children}</main>
+        <main id="main-content" tabIndex={-1} className="flex-1 w-full">{children}</main>
         <Colophon />
       </body>
     </html>

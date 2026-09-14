@@ -1,0 +1,16 @@
+# Frontend preview uploads contain only app/build inputs.
+# Never send local credentials, caches, test fixtures, or databases.
+.env*
+.next/
+node_modules/
+.vercel/
+*.tsbuildinfo
+**/*.test.*
+vitest.config.ts
+AGENTS.md
+README.md
+**/*.db
+**/*.sqlite*
+output/
+test-results/
+playwright-report/

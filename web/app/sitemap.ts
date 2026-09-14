@@ -5,6 +5,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // lastModified is the build date — each deploy refreshes it.
   const lastModified = new Date();
   return [
+    { url: `${SITE_URL}/issues`, lastModified, changeFrequency: "monthly", priority: 0.9 },
+    { url: `${SITE_URL}/issues/01`, lastModified: new Date("2026-06-11"), priority: 0.6 },
+    {
+      url: `${SITE_URL}/issues/02`,
+      lastModified: new Date("2026-09-14"),
+      changeFrequency: "monthly",
+      priority: 0.9,
+    },
     {
       url: SITE_URL,
       lastModified,

@@ -5,17 +5,18 @@ describe("friendlyError", () => {
   it("maps 'Failed to fetch' to an offline-style message", () => {
     const e = friendlyError(new Error("Failed to fetch"));
     expect(e.headline.toLowerCase()).toContain("reach the server");
-    expect(e.suggestion).toMatch(/backend|api/i);
+    expect(e.suggestion).toMatch(/try again|own text/i);
   });
 
-  it("maps a 401 response to a credentials-error message", () => {
+  it("maps a 401 response to a visitor-friendly service message", () => {
     const e = friendlyError(
       new Error(
         'API 401: {"error":"invalid_token","error_description":"The access token provided is expired"}',
       ),
     );
-    expect(e.headline.toLowerCase()).toContain("credentials");
-    expect(e.suggestion).toMatch(/token|rotate|configuration/i);
+    expect(e.headline.toLowerCase()).toContain("unavailable");
+    expect(e.suggestion).toMatch(/try again|own text/i);
+    expect(e.suggestion).not.toMatch(/token|configuration|restart/i);
   });
 
   it("maps a 'Could not find lyrics' 404 to a not-found message", () => {

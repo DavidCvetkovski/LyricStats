@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import json
 import unicodedata
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import Field, Session, SQLModel, create_engine, select
+from sqlalchemy import func
 
 from .config import DATABASE_URL, DB_PATH
 
@@ -179,7 +181,7 @@ def get_or_create_artist(
 
 
 def get_artist(name: str) -> Artist | None:
-    with session() as s:
+    with read_session() as s:
         return s.exec(select(Artist).where(Artist.name == _norm(name))).first()
 
 
@@ -225,17 +227,24 @@ def upsert_song(
 
 
 def find_song(artist_name: str, title: str) -> Song | None:
-    a = get_artist(artist_name)
-    if not a:
-        return None
-    with session() as s:
+    # Resolve the artist and song together in one database round trip. Equality
+    # also keeps literal '%' and '_' in titles from becoming LIKE wildcards.
+    with read_session() as s:
         return s.exec(
-            select(Song).where(Song.artist_id == a.id, Song.title.ilike(title))  # type: ignore[attr-defined]
+            select(Song)
+            .join(Artist, Song.artist_id == Artist.id)
+            .where(
+                Artist.name == _norm(artist_name),
+                # SQLite's lower() only folds ASCII, unlike Python's Unicode
+                # lower(). Apply the same database rules to both sides so an
+                # exact title such as "Šta" still matches in the local cache.
+                func.lower(Song.title) == func.lower(title.strip()),
+            )
         ).first()
 
 
 def list_songs(artist: Artist) -> list[Song]:
-    with session() as s:
+    with read_session() as s:
         return list(s.exec(select(Song).where(Song.artist_id == artist.id)).all())
 
 
@@ -278,7 +287,7 @@ def get_artist_aggregate(name: str) -> "ArtistAggregate | None":
     key = normalize_key(name)
     if not key:
         return None
-    with session() as s:
+    with read_session() as s:
         return s.exec(
             select(ArtistAggregate)
             .where(ArtistAggregate.name_key == key)
@@ -286,7 +295,13 @@ def get_artist_aggregate(name: str) -> "ArtistAggregate | None":
         ).first()
 
 
-def search_artist_aggregates(q: str, limit: int = 8) -> list["ArtistAggregate"]:
+@dataclass(frozen=True)
+class ArtistSuggestion:
+    display_name: str
+    song_count: int
+
+
+def search_artist_aggregates(q: str, limit: int = 8) -> list[ArtistSuggestion]:
     """Typeahead search over dataset artists for the search-box autocomplete.
 
     Prefix matches on the aggressive key rank first (the obvious intent while
@@ -307,12 +322,12 @@ def search_artist_aggregates(q: str, limit: int = 8) -> list["ArtistAggregate"]:
     prefix_rank = case((ArtistAggregate.name_key.like(f"{key}%"), 0), else_=1)
     with read_session() as s:
         rows = s.exec(
-            select(ArtistAggregate)
+            select(ArtistAggregate.display_name, ArtistAggregate.song_count)
             .where(ArtistAggregate.name_key.like(f"%{key}%"))  # type: ignore[attr-defined]
             .order_by(prefix_rank, ArtistAggregate.song_count.desc())  # type: ignore[attr-defined]
             .limit(limit)
         ).all()
-    return list(rows)
+    return [ArtistSuggestion(display_name=name, song_count=count) for name, count in rows]
 
 
 def suggest_artist_aggregates(name: str, limit: int = 1) -> list["ArtistAggregate"]:

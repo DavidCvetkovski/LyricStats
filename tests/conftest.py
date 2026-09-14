@@ -2,8 +2,19 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
+
 import pytest
 from sqlmodel import SQLModel, create_engine
+
+# db initializes the SQLite schema at import time, before pytest fixtures run.
+# Set both overrides before importing it so test collection cannot connect to
+# a developer's .env database. Keep this small bootstrap DB in the OS temp dir.
+os.environ["DATABASE_URL"] = ""
+os.environ["LYRICSTATS_DB"] = os.path.join(
+    tempfile.mkdtemp(prefix="lyricstats-tests-"), "bootstrap.db"
+)
 
 from lyricstats import db
 
