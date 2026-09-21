@@ -7,6 +7,8 @@ Tables:
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import json
 import unicodedata
 from dataclasses import dataclass
@@ -350,30 +352,40 @@ class ArtistSuggestion:
 def search_artist_aggregates(q: str, limit: int = 8) -> list[ArtistSuggestion]:
     """Typeahead search over dataset artists for the search-box autocomplete.
 
-    Prefix matches on the aggressive key rank first (the obvious intent while
-    someone is typing a name), then substring matches fill any remaining slots.
-    Within each group the larger catalogue wins, so the better-known artist
-    surfaces. Works on both Postgres and SQLite via plain LIKE — name_key is
-    already lowercased alphanumerics, so the query key (normalised the same way)
-    compares cleanly.
+    Names that start with the typed key come first, largest catalogue first;
+    that is one indexed lookup (a key range on SQLite, a trigram-indexed LIKE
+    on Postgres). Only when those do not fill the list does a substring pass
+    over the bigger catalogues top it up. name_key is lowercased alphanumerics,
+    so the query key (normalised the same way) compares cleanly.
     """
     key = normalize_key(q)
     if len(key) < 2:
         return []
-    from sqlalchemy import case  # noqa: PLC0415
+    return [ArtistSuggestion(display_name=n, song_count=c) for n, c in _search_cached(key, limit)]
 
-    # One query, one round-trip: match any name containing the key, but order
-    # prefix matches ahead of mid-word ones, then by catalogue size. (The
-    # boolean CASE sorts 0 before 1, i.e. prefix hits first.)
-    prefix_rank = case((ArtistAggregate.name_key.like(f"{key}%"), 0), else_=1)
+
+@lru_cache(maxsize=2048)
+def _search_cached(key: str, limit: int) -> tuple[tuple[str, int], ...]:
+    cols = (ArtistAggregate.display_name, ArtistAggregate.song_count)
+    by_size = ArtistAggregate.song_count.desc()  # type: ignore[attr-defined]
+    if DATABASE_URL:
+        prefix = ArtistAggregate.name_key.like(f"{key}%")  # type: ignore[attr-defined]
+    else:
+        prefix = (ArtistAggregate.name_key >= key) & (ArtistAggregate.name_key < key + "\uffff")
     with read_session() as s:
-        rows = s.exec(
-            select(ArtistAggregate.display_name, ArtistAggregate.song_count)
-            .where(ArtistAggregate.name_key.like(f"%{key}%"))  # type: ignore[attr-defined]
-            .order_by(prefix_rank, ArtistAggregate.song_count.desc())  # type: ignore[attr-defined]
-            .limit(limit)
-        ).all()
-    return [ArtistSuggestion(display_name=name, song_count=count) for name, count in rows]
+        rows = list(s.exec(select(*cols).where(prefix).order_by(by_size).limit(limit)).all())
+        # Few names start this way: add names that contain it (a collaboration,
+        # a surname). That pass scans on SQLite, so it runs only when needed.
+        if len(rows) < min(limit, 5):
+            seen = {name for name, _ in rows}
+            more = s.exec(
+                select(*cols)
+                .where(ArtistAggregate.name_key.like(f"%{key}%"))  # type: ignore[attr-defined]
+                .order_by(by_size)
+                .limit(limit)
+            ).all()
+            rows += [r for r in more if r[0] not in seen][: limit - len(rows)]
+    return tuple((str(n), int(c)) for n, c in rows)
 
 
 def suggest_artist_aggregates(name: str, limit: int = 1) -> list["ArtistAggregate"]:
@@ -425,6 +437,7 @@ def upsert_artist_aggregate(
     stats: dict,
     source: str = "dataset",
 ) -> None:
+    _search_cached.cache_clear()
     key = _norm(name)
     nkey = normalize_key(name)
     payload = json.dumps(stats, ensure_ascii=False)

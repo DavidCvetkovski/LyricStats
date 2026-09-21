@@ -550,7 +550,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
           ) : (
             topSongs.map((song, i) => (
             <div
-              key={song.title}
+              key={`${song.title}#${i}`}
               className="grid grid-cols-[2rem_1fr] sm:grid-cols-[2.5rem_1fr_auto_auto_auto] gap-x-3 sm:gap-x-4 gap-y-2 items-baseline border-b border-rule py-3"
             >
               <span className="figure text-ink-mute tabular-nums text-sm sm:text-base self-start mt-1">

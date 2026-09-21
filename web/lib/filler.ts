@@ -3,23 +3,29 @@
  * tables set these aside so what is left is vocabulary. The same lists drive
  * scripts/build_signatures.py; keep the two in step.
  */
+// English words that are grammar: never vocabulary, in any table.
+const EN_GRAMMAR =
+  "the a an and or but if of to in on at by for with as is are was were be been being am i me my mine " +
+  "you your yours he him his she her hers it its we us our ours they them their theirs this that " +
+  "these those there here where when why how what which who whom whose will would can could shall " +
+  "should may might must do does did done have has had having not no nor none don't doesn't didn't " +
+  "won't can't couldn't wouldn't shouldn't isn't aren't wasn't weren't ain't i'm i've i'll i'd " +
+  "you're you've you'll you'd he's she's it's we're we've we'll they're they've they'll that's " +
+  "there's here's what's who's let's than then so too very just only also yeah yes oh ah uh well " +
+  "okay ok hey gonna wanna gotta gimme lemme cause 'cause";
+// English words that carry little on their own: set aside when choosing one word to stand for a catalogue.
+const EN_GENERIC =
+  "go goes going gone went come comes came coming get gets got getting gotten let make made making " +
+  "take took taken keep kept give gave given put say said says saying tell told know knew known " +
+  "think thought feel felt want wanted need needed see saw seen look looked even still yet again " +
+  "away back down up out off over under into from about around through after before because while " +
+  "till until once ever never always all any some every each much many more most little few like " +
+  "way thing things something nothing everything anything someone everyone anyone one ones time " +
+  "times own same other another really right";
+
 const LISTS = [
-  // English
-  "the a an and or but if of to in on at by for with as is are was were be been being i me my mine " +
-    "you your yours he him his she her hers it its we us our ours they them their theirs this that " +
-    "these those there here where when why how what which who whom whose will would can could shall " +
-    "should may might must do does did done have has had having go goes going gone went come comes " +
-    "came coming get gets got getting gotten let make made making take took taken keep kept give " +
-    "gave given put say said says saying tell told know knew known think thought feel felt want " +
-    "wanted need needed see saw seen look looked just only even still yet also very too so such than " +
-    "then now again away back down up out off over under into from about around through after " +
-    "before because cause 'cause while till until once ever never always all any some every each " +
-    "much many more most little few no not nor none don't doesn't didn't won't can't couldn't " +
-    "wouldn't shouldn't isn't aren't wasn't weren't ain't i'm i've i'll i'd you're you've you'll " +
-    "you'd he's she's it's we're we've we'll they're they've they'll that's there's here's what's " +
-    "who's let's gonna wanna gotta gimme lemme yeah yes oh ah uh well okay ok hey like way thing " +
-    "things something nothing everything anything someone everyone anyone one ones time times own " +
-    "same other another really right",
+  EN_GRAMMAR,
+  EN_GENERIC,
   // Bosnian / Croatian / Serbian
   "i je da se ne ti mi na sam za što sve kad ja to si ali kao od samo sa u o me te još ću će nema " +
     "znam nije imam ona ovo sad bez ko jer ili dok sto nek nikad moj moja moje moju tvoj tvoja tvoje " +
@@ -52,6 +58,7 @@ const LISTS = [
 ];
 
 const FILLER = new Set(LISTS.join(" ").split(/\s+/).filter(Boolean));
+const GENERIC = new Set(EN_GENERIC.split(/\s+/));
 
 const AD_LIB = /^(?:[aeiouy]+h*|(?:la|na|da|dah|ooh|ohh|aah|ah|oh|uh|eh|ey|ay|yeah|yah|yo|mm|hmm|ba|bum|whoa|woah|wah|ha|hey|oi|ra|ta|ti|di|du|lo|le|li|nah|yea|ye|wo|wa|ho|oo|ai|ya|yu|yi|hi|hu|hah|heh|huh|hum|shh|ssh|tsk|brr|grr)+h?)$/;
 
@@ -65,7 +72,12 @@ export function isFiller(word: string): boolean {
   return false;
 }
 
-/** The rows of a word table with the filler set aside. */
+/** True for grammar and ad-libs only; generic verbs and adverbs stay. */
+export function isGrammar(word: string): boolean {
+  return isFiller(word) && !GENERIC.has(word.toLowerCase().replace(/’/g, "'"));
+}
+
+/** The rows of a word table with the grammar set aside. */
 export function vocabulary<T extends [string, ...unknown[]]>(rows: T[] | null | undefined): T[] {
-  return (rows ?? []).filter(([w]) => !isFiller(w));
+  return (rows ?? []).filter(([w]) => !isGrammar(w));
 }

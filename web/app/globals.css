@@ -595,3 +595,12 @@ mark.song-drop {
 .issue-breadcrumb {display:block;width:fit-content;margin-bottom:28px;color:var(--ink-mute);font-size:.65rem;text-transform:uppercase;letter-spacing:.12em;}
 .issue-breadcrumb:hover {color:var(--accent);}
 
+
+/* A suggestion field with a request in flight: the underline breathes. */
+.field.is-busy {
+  animation: breathe-line 900ms ease-in-out infinite;
+}
+@keyframes breathe-line {
+  0%, 100% { border-bottom-color: var(--rule-strong); }
+  50% { border-bottom-color: var(--accent); }
+}

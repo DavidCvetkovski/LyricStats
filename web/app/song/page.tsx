@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArtistAutocomplete } from "@/components/ArtistAutocomplete";
+import { TitleAutocomplete } from "@/components/TitleAutocomplete";
 import { getArtistTitles } from "@/lib/api";
 import { loadLastSong, saveLastSong } from "@/lib/lastSearch";
 import { songPath } from "@/lib/slug";
@@ -65,9 +66,9 @@ function SongSearch() {
       });
   }
 
-  function go(hash = "") {
+  function go(hash = "", chosen = title) {
     const a = artist.trim();
-    const t = title.trim();
+    const t = chosen.trim();
     if (!a || !t) return;
     saveLastSong({ artist: a, title: t });
     router.push(songPath(a, t) + hash);
@@ -104,22 +105,14 @@ function SongSearch() {
         </label>
         <label className="block">
           <span className="smallcaps mb-1 block">The Song</span>
-          <input
-            className="field"
-            type="text"
-            placeholder="Thriller"
+          <TitleAutocomplete
             value={title}
-            list="catalogue-titles"
-            autoComplete="off"
-            maxLength={300}
+            onChange={setTitle}
+            onPick={(t) => go("", t)}
+            titles={titles}
+            placeholder="Thriller"
             onFocus={() => loadTitles(artist)}
-            onChange={(e) => setTitle(e.target.value)}
           />
-          <datalist id="catalogue-titles">
-            {titles.map((t) => (
-              <option key={t} value={t} />
-            ))}
-          </datalist>
         </label>
         <div className="sm:col-span-2 flex flex-wrap items-center gap-x-4 gap-y-3">
           <button type="submit" className="pill" disabled={!artist.trim() || !title.trim()}>

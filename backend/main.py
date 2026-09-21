@@ -533,7 +533,7 @@ def _get_merged_song_count(agg: db.ArtistAggregate | None, lb: db.Artist | None)
 @app.get("/api/artist/suggest")
 def artist_suggest(
     q: str = Query("", max_length=120),
-    limit: int = Query(8, ge=1, le=20),
+    limit: int = Query(8, ge=1, le=50),
 ) -> dict[str, Any]:
     """Typeahead suggestions from the precomputed dataset (instant, no fetch).
 

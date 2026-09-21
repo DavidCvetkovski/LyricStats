@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { getCachedArtistSuggestions, suggestArtists, type ArtistSuggestion } from "@/lib/api";
 import { artistKey } from "@/lib/utils";
+import { Highlight } from "./Highlight";
 
 type Props = {
   value: string;
@@ -16,10 +17,10 @@ type Props = {
 
 // Sit on the latest keystroke this long before asking the API, so a fast
 // typist fires one request instead of one per letter.
-const DEBOUNCE_MS = 250;
+const DEBOUNCE_MS = 140;
 // Fetch a generous candidate set but only show the top few. The extra rows let
 // us narrow locally as the reader types more (no extra round-trips).
-const FETCH_LIMIT = 20;
+const FETCH_LIMIT = 40;
 const SHOW = 8;
 
 /**
@@ -37,6 +38,7 @@ export function ArtistAutocomplete({
   autoFocus,
 }: Props) {
   const [items, setItems] = useState<ArtistSuggestion[]>([]);
+  const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
 
@@ -94,6 +96,7 @@ export function ArtistAutocomplete({
     const ac = new AbortController();
     abortRef.current = ac;
     const t = setTimeout(async () => {
+      setBusy(true);
       try {
         const found = await suggestArtists(q, FETCH_LIMIT, ac.signal);
         if (ac.signal.aborted) return;
@@ -101,12 +104,15 @@ export function ArtistAutocomplete({
       } catch {
         // Network/abort error: leave whatever's showing in place rather than
         // blanking the menu, so a hiccup doesn't make it "stop working".
+      } finally {
+        if (!ac.signal.aborted) setBusy(false);
       }
     }, DEBOUNCE_MS);
 
     return () => {
       clearTimeout(t);
       ac.abort();
+      setBusy(false);
     };
   }, [value]);
 
@@ -179,7 +185,7 @@ export function ArtistAutocomplete({
   return (
     <div ref={rootRef} className="relative">
       <input
-        className={className}
+        className={`${className}${busy ? " is-busy" : ""}`}
         type="text"
         placeholder={placeholder}
         value={value}
@@ -225,7 +231,7 @@ export function ArtistAutocomplete({
                   i === active ? "text-accent" : "text-ink"
                 }`}
               >
-                {it.name}
+                <Highlight text={it.name} query={value} />
               </span>
               <span className="figure text-[0.7rem] tabular-nums text-ink-mute whitespace-nowrap shrink-0">
                 {it.song_count.toLocaleString()}{" "}

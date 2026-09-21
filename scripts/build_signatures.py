@@ -353,7 +353,7 @@ def hook_quote(lines: list[tuple[int, str, str]]) -> dict | None:
             continue
         score = times + (4 if 5 <= n <= 12 else 0) + min(n, 8) / 10
         if JUNK_QUOTE_TITLE.search(title):
-            score -= 10
+            score -= 1000  # a mash-up or live take only when nothing else carries the word
         if score > best_score:
             best, best_score = {"line": line, "title": title, "times": times}, score
     return best
@@ -430,8 +430,10 @@ def signature(display: str, rows: SongRows, idx: list[int], df: DF,
         else:
             words.sort(key=lambda x: x[0] != cw)
         cq = curated.get("quote")
-        if cq and cq.get("song_title") and any(
-            normalize_key(rows.rows[i][0]) == normalize_key(cq["song_title"]) for i in idx
+        ck = normalize_key(cq["song_title"]) if cq and cq.get("song_title") else ""
+        if ck and any(
+            normalize_key(rows.rows[i][0]).startswith(ck) or ck.startswith(normalize_key(rows.rows[i][0]))
+            for i in idx
         ):
             quote = {"line": cq["quote"], "title": cq["song_title"], "times": 0}
         else:

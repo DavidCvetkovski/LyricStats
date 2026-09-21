@@ -286,10 +286,12 @@ def test_autocomplete_uses_one_compact_read_without_lyrics(temp_db):
     finally:
         event.remove(temp_db, "before_cursor_execute", capture)
     assert out == {"suggestions": [{"name": "Drake", "song_count": 100}]}
-    assert len(statements) == 1
-    assert "songs_json" not in statements[0]
-    assert "stats_json" not in statements[0]
-    assert "lyrics" not in statements[0]
+    # One indexed prefix read; a substring top-up only when prefixes are scarce.
+    assert 1 <= len(statements) <= 2
+    for statement in statements:
+        assert "songs_json" not in statement
+        assert "stats_json" not in statement
+        assert "lyrics" not in statement
 
 
 # ── dataset payload ──────────────────────────────────────────────────────────
