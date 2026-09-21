@@ -107,8 +107,12 @@ export function TextSheet({ song }: { song: SongPayload }) {
       if (t != null && prev != null && t - prev >= SILENCE) out.set(i, t - prev);
     });
     if (r.gap != null && r.gap_at != null && r.gap >= SILENCE) {
+      // After the stamped line the silence follows, and after any line sung
+      // with it (unstamped): the rule goes above the next stamped line.
       const before = times.findIndex((t) => t != null && Math.abs(t - r.gap_at!) < 0.6);
-      if (before >= 0 && before + 1 < times.length) out.set(before + 1, r.gap);
+      let next = before + 1;
+      while (before >= 0 && next < times.length && times[next] == null) next++;
+      if (before >= 0 && next < times.length) out.set(next, r.gap);
     }
     return out;
   }, [times, r.gap, r.gap_at]);

@@ -61,7 +61,9 @@ def line_times(synced: str, lines: list[str]) -> list[float | None] | None:
 
     LRCLIB's plain and synced texts usually run line for line; a Genius text
     set against LRCLIB timing does not, so lines are matched by their letters,
-    in order, within a short window. None unless most lines found a stamp.
+    in order, within a short window. A timed line that carries two counted
+    lines stamps the first; the second is sung but has no stamp of its own
+    (None), and still counts as found. None unless most lines were found.
     """
     events = [(ts, _match_key(text)) for ts, text in _lrc_events(synced)]
     if not events or not lines:
@@ -69,13 +71,24 @@ def line_times(synced: str, lines: list[str]) -> list[float | None] | None:
     out: list[float | None] = []
     j = 0
     matched = 0
+    rest = ""  # what is left of a timed line already stamped on an earlier line
     for ln in lines:
         key = _match_key(ln)
+        if rest and key and rest.startswith(key):
+            out.append(None)
+            matched += 1
+            rest = rest[len(key):]
+            if not rest:
+                j += 1
+            continue
+        if rest:
+            j, rest = j + 1, ""
         hit = None
         step = 1
         window = range(j, min(j + 8, len(events)))
         # The same line; then a line the timed text splits in two; then a
-        # line spelt a little differently ("lurkin'" for "lurking").
+        # timed line that runs on into the next counted line; then a line
+        # spelt a little differently ("lurkin'" for "lurking").
         for i in window:
             if events[i][1] == key:
                 hit = i
@@ -84,6 +97,13 @@ def line_times(synced: str, lines: list[str]) -> list[float | None] | None:
             for i in window:
                 if i + 1 < len(events) and events[i][1] + events[i + 1][1] == key:
                     hit, step = i, 2
+                    break
+        if hit is None and len(key) >= 8:
+            for i in window:
+                # at the start, or after a short lead-in ("and", "oh") the other text lacks
+                at = events[i][1].find(key, 0, 5 + len(key))
+                if at >= 0 and len(events[i][1]) > at + len(key):
+                    hit, step, rest = i, 0, events[i][1][at + len(key):]
                     break
         if hit is None and len(key) >= 8:
             for i in window:

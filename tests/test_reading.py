@@ -96,6 +96,23 @@ def test_line_times_bridge_a_split_line_and_a_respelling():
     assert r["line_at"] == [10.0, 14.0, 18.0, 22.0, 25.0]
 
 
+def test_line_times_stamp_the_first_of_two_lines_sung_as_one():
+    plain = (
+        "Today is gonna be the day\nThat they're gonna throw it back to you\n"
+        "I don't believe that anybody\nFeels the way I do about you now\n"
+        "And all the roads we have to walk are winding\n"
+    )
+    timed = "\n".join(
+        [
+            "[00:12.00] Today is gonna be the day that they're gonna throw it back to you",
+            "[00:20.00] And I don't believe that anybody feels the way I do about you now",
+            "[00:28.00] And all the roads we have to walk are winding",
+        ]
+    )
+    r = reading("Wonderwall", plain, timed, 60.0)
+    assert r["line_at"] == [12.0, None, 20.0, None, 28.0]
+
+
 def test_line_times_are_dropped_when_the_texts_do_not_match():
     r = reading("Hold On", PLAIN, LRC, 60.0)
     assert r["line_at"] is None
