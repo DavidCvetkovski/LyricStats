@@ -73,20 +73,36 @@ which reads the big local tables (`data/lrclib/_artist_tok.db`, `_song_stat.db`)
   language from an artist's most frequent words; rarity is judged within that language),
 - with a hook line that carries it, when one of the artist's songs has one.
 
-It also stores the *staple* (the word they say most, grammar and ad-libs set aside), the
-runner-ups, and three more corpus percentiles (`question_share`, `avg_repetition_ratio`,
-`avg_word_length`). Hand-curated motifs in `data/reviews/*.json` win over the score.
+It also stores the *staple* (the word they say most, grammar and ad-libs set aside) and the
+25 *staples* under it that fill the artist page's table, the runner-ups, and three more
+corpus percentiles (`question_share`, `avg_repetition_ratio`, `avg_word_length`); a row
+without the importer's six percentiles gets those too. A quote names the song, not the
+version ("(Extended Mix)", " - Live" dropped), and never comes from a mash-up or from a remix
+the artist is credited for. Hand-curated motifs in `data/reviews/*.json` win over the score.
 
 ```bash
 uv run python scripts/build_signatures.py --df       # document frequency per language, ~1 min
 uv run python scripts/build_signatures.py --only "Kendrick Lamar" --show 8   # look before writing
 uv run python scripts/build_signatures.py --write    # every artist with ≥ 25 songs, ~45 min
 uv run python scripts/build_signatures.py --prod-plan output/signatures-prod.json   # read-only
-uv run python scripts/build_signatures.py --prod-apply output/signatures-prod.json  # one UPDATE
+uv run python scripts/build_signatures.py --prod-apply output/signatures-prod.json  # batched merge
 ```
 
 The production plan is computed against production's own song lists, because some catalogues
-were curated by hand up there, and it is applied as one server-side merge into `stats_json`.
+were curated by hand up there. It is merged into `stats_json` in batches of 5,000 rows with a
+vacuum between them, so the table reuses its space instead of doubling against the storage cap.
+
+## The clock of stored songs
+
+A song page's minute gutter, pace and silences come from LRCLIB's timed text, which is read
+once when a song is stored and never kept. Songs stored before a field existed get it with:
+
+```bash
+uv run python scripts/backfill_song_clock.py --dry-run   # the local database, report only
+uv run python scripts/backfill_song_clock.py --prod      # production, via .env.prod
+```
+
+A timed text that does not line up with the stored words is not used.
 
 ## Tests
 
