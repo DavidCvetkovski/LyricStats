@@ -30,7 +30,8 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
         .filter(Boolean)
         .join(" · ")
     : "";
-  const description = `${song.title} by ${by}, read closely${bits ? `: ${bits}` : ""}.`;
+  const words = song.analysis_complete && song.lyrics.trim() ? "The words and a close reading of " : "";
+  const description = `${words}${song.title} by ${by}${words ? "" : ", read closely"}${bits ? `: ${bits}` : ""}.`;
   const canonical = `/song/${song.slug.artist}/${song.slug.title}`;
   return {
     title: `${song.title} by ${by}`,
