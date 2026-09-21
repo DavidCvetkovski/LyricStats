@@ -23,3 +23,6 @@ web/next-env.d.ts
 .tmp/
 tmp/
 scratch/
+
+# Build outputs of the scripts (signature plans, logs)
+output/

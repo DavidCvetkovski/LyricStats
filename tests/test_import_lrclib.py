@@ -6,6 +6,8 @@ truncation-stub suppression, NUL handling, and the synced-lyrics parser.
 
 from __future__ import annotations
 
+from collections import Counter
+
 import scripts.import_lrclib as imp
 
 
@@ -93,8 +95,6 @@ def _agg(display: str, count: int) -> tuple:
 
 
 # ── content fingerprint + union dedup ────────────────────────────────────────
-
-from collections import Counter
 
 
 def test_content_fingerprint_ignores_order_and_rare_words():
