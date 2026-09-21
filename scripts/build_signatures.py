@@ -529,9 +529,13 @@ def prod_apply(path: Path) -> None:
         conn.execute("CREATE TEMP TABLE sig_patch (name text PRIMARY KEY, patch text NOT NULL)")
         with conn.cursor().copy("COPY sig_patch (name, patch) FROM STDIN") as cp:
             for name, patch in patches.items():
-                cp.write_row((name, json.dumps(patch, ensure_ascii=False)))
+                text = json.dumps(patch, ensure_ascii=False).replace("\\u0000", "").replace("\x00", "")
+                cp.write_row((name, text))
+        # A few stored rows carry NUL escapes from broken submissions, which
+        # jsonb refuses; they are dropped from the text before the merge.
         cur = conn.execute(
-            "UPDATE artistaggregate a SET stats_json = (a.stats_json::jsonb || p.patch::jsonb)::text "
+            "UPDATE artistaggregate a SET stats_json = "
+            "(replace(a.stats_json, '\\u0000', '')::jsonb || p.patch::jsonb)::text "
             "FROM sig_patch p WHERE a.name = p.name"
         )
         print(f"  rows updated: {cur.rowcount:,}")
