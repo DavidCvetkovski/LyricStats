@@ -20,6 +20,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from lyricstats import db, fetch, stats
+from lyricstats.percentiles import archive_songs, percentiles
+from lyricstats.reading import reading
 from lyricstats.config import SEED_KEY, LIVE_FETCH_ENABLED
 from lyricstats.text import tokenize, all_lines
 
@@ -57,12 +59,9 @@ async def cache_public_reads(request: Request, call_next):
     the Python function while browsers keep a shorter freshness window.
     """
     response = await call_next(request)
-    if request.url.path not in {"/api/song", "/api/artist/suggest"}:
+    if request.url.path not in {"/api/song", "/api/artist/suggest", "/api/artist/titles"}:
         return response
-    explicit_read = any(
-        request.query_params.get(key, "").lower() in {"1", "true", "yes", "on", "t", "y"}
-        for key in ("force", "full", "cache_only")
-    )
+    explicit_read = request.query_params.get("force", "").lower() in {"1", "true", "yes", "on", "t", "y"}
     if request.method == "GET" and response.status_code == 200 and not explicit_read:
         response.headers["Cache-Control"] = "public, max-age=60"
         response.headers["Vercel-CDN-Cache-Control"] = (
@@ -129,125 +128,232 @@ def ingest(song: IngestSong, x_seed_key: str = Header(default="")) -> dict[str, 
 # ── single song ────────────────────────────────────────────────────────────
 
 
+# ── song ─────────────────────────────────────────────────────────────────────
+#
+# A song page is set from three things: the text and its reading (computed
+# once, cached next to the lyrics), the artist's catalogue for context, and
+# the archive-wide quantiles for where the song stands among everything.
+
+CATALOGUE_POINTS = 240  # dots per strip on the song page; bigger catalogues are thinned
+
+
+def _title_rows(agg: db.ArtistAggregate) -> list[list[Any]]:
+    """A dataset artist's catalogue: [title, year, wc, uniq, ttr, chorus, rep, has_sec]."""
+    try:
+        rows = json.loads(agg.songs_json or "[]")
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(rows, list):
+        return []
+    return [r for r in rows if isinstance(r, list) and len(r) == 8 and isinstance(r[0], str)]
+
+
+def _unslug(s: str) -> str:
+    """A URL slug back into words; anything that was never a slug passes through."""
+    s = s.strip()
+    if " " in s or "-" not in s:
+        return s
+    return " ".join(part for part in s.split("-") if part)
+
+
+def _resolve(
+    artist: str, title: str
+) -> tuple[str, str, db.ArtistAggregate | None, list[Any] | None]:
+    """Turn what the URL carries (a name, or its slug) into the names we file
+    under. Slugs lose accents and punctuation, so both sides meet on the same
+    aggressive key: 'michael-jackson' and 'Michael Jackson' at 'michaeljackson'.
+
+    Returns (artist name, title, dataset aggregate, catalogue row); the last
+    two are None when the song is not in the dataset.
+    """
+    agg = db.get_artist_aggregate(artist)
+    if agg:
+        want = db.normalize_key(title)
+        for row in _title_rows(agg):
+            if db.normalize_key(row[0]) == want:
+                return agg.display_name, row[0], agg, row
+        return agg.display_name, _unslug(title), agg, None
+    lb = db.find_artist_by_key(artist)
+    if lb:
+        # Keep the caller's casing when it named the artist; a slug takes the
+        # filed (lower-case) name, which is what the provider was asked with.
+        name = artist if artist.lower() == lb.name else lb.name
+        cached = db.find_song_by_key(lb, title)
+        if cached:
+            return name, cached.title, None, None
+        return name, _unslug(title), None, None
+    return _unslug(artist), _unslug(title), None, None
+
+
 @app.get("/api/song")
 def song(
     artist: Annotated[str, Query(min_length=1, max_length=120)],
     title: Annotated[str, Query(min_length=1, max_length=300)],
     force: bool = False,
-    full: bool = False,
-    cache_only: bool = False,
 ) -> dict[str, Any]:
-    """Serve stored analysis first; provider requests are only needed on a miss.
+    """One song, read: its text, its numbers, and where it stands.
 
-    Dataset catalogues contain useful song statistics even when full lyrics
-    are unavailable. Expose their limited coverage explicitly so the browser
-    can show an instant summary and offer full analysis as a separate action.
-    ``full`` requests lyrics while preserving the existing full-lyrics cache;
-    ``force`` explicitly refreshes those lyrics. ``cache_only`` prevents all
-    provider calls, including when either of the other options is requested.
+    `artist` and `title` may be names or the slugs from a song page's URL.
+    Stored analysis is served first; a provider is only asked on a miss, or
+    on an explicit `force`. When no provider has the text but the catalogue
+    knows the song, its stored figures are served without the text.
     """
     artist, title = artist.strip(), title.strip()
     if not artist or not title:
         raise HTTPException(status_code=422, detail="Enter an artist and song title.")
 
-    db_song = db.find_song(artist, title)
-    if db_song and db_song.lyrics.strip() and (not force or cache_only):
-        return _song_payload(artist, db_song, source="cache")
+    name, canon, agg, row = _resolve(artist, title)
 
-    agg = db.get_artist_aggregate(artist)
-    # Artist punctuation/accent aliases may resolve to a canonical cache name.
-    if agg and agg.name != artist.lower():
-        canonical_song = db.find_song(agg.name, title)
-        if canonical_song and canonical_song.lyrics.strip() and (not force or cache_only):
-            return _song_payload(agg.display_name, canonical_song, source="cache")
-    summary = _dataset_song_payload(agg, title) if agg else None
-    if summary and (not (force or full) or cache_only):
-        return summary
-    if cache_only:
-        raise HTTPException(status_code=404, detail=f"No stored analysis for '{artist} — {title}'.")
+    if not force:
+        cached = db.find_song(name, canon)
+        if not (cached and cached.lyrics.strip()):
+            # The text may be filed under the provider's spelling of the name.
+            lb = db.find_artist_by_key(name)
+            cached = db.find_song_by_key(lb, canon) if lb else None
+        if cached and cached.lyrics.strip():
+            return _song_payload(name, cached, source="cache", agg=agg, row=row)
 
     try:
-        s = fetch.fetch_song(artist, title, force=force)
+        s = fetch.fetch_song(name, canon, force=force)
     except fetch.FetchError as e:
-        if summary:
-            return summary
+        if row is not None:
+            return _summary_payload(agg, row)
         raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001
         log.exception("song fetch failed")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
-    db_song = db.find_song(s.artist, s.title)
-    if db_song:
-        return _song_payload(s.artist, db_song, source=s.source)
+    shown = name if agg else s.artist
+    saved = db.find_song(s.artist, s.title)
+    if saved and saved.lyrics == s.lyrics:
+        return _song_payload(shown, saved, source=s.source, agg=agg, row=row)
     # A provider adapter may return lyrics without persisting them.
-    st = stats.compute(s.lyrics)
-    return {
-        "artist": s.artist,
-        "title": s.title,
-        "album": s.album,
-        "year": s.year,
-        "source": s.source,
-        "lyrics": s.lyrics,
-        "stats": st.to_dict(),
-        "analysis_complete": True,
-        "has_sections": any(k != "other" for k in st.section_kinds),
-    }
+    return _assemble(
+        shown, s.title, s.album, s.year, s.source, s.lyrics,
+        stats.compute(s.lyrics).to_dict(), reading(s.title, s.lyrics), agg, row,
+    )
 
 
-def _song_payload(artist: str, song: db.Song, *, source: str) -> dict[str, Any]:
+def _song_payload(
+    artist: str,
+    song: db.Song,
+    *,
+    source: str,
+    agg: db.ArtistAggregate | None = None,
+    row: list[Any] | None = None,
+) -> dict[str, Any]:
     cached = db.load_stats(song)
     # Migrate old caches that pre-date new fields (e.g. section_sequence)
     if cached and "section_sequence" in cached:
-        st = stats.SongStats.from_dict(cached)
+        st = cached
     else:
-        st = stats.compute(song.lyrics)
-        db.save_stats(song, st.to_dict())
+        st = stats.compute(song.lyrics).to_dict()
+        db.save_stats(song, st)
+    if "reading" not in st:
+        # A cache entry from before the reading existed: read the text now
+        # (no clock; the synced lines were never kept) and remember it.
+        st = {**st, "reading": reading(song.title, song.lyrics)}
+        db.save_stats(song, st)
+    return _assemble(
+        artist, song.title, song.album, song.year, source, song.lyrics, st, st["reading"], agg, row
+    )
+
+
+def _summary_payload(agg: db.ArtistAggregate, row: list[Any]) -> dict[str, Any]:
+    """The catalogue's figures for a song whose text no provider has."""
+    title, year, wc, uniq, ttr, chorus, rep, has_sec = row
+    st = stats.SongStats(
+        word_count=wc,
+        unique_words=uniq,
+        type_token_ratio=ttr,
+        chorus_ratio=chorus,
+        repetition_ratio=rep,
+    ).to_dict()
+    r = {"wc": wc, "uniq": uniq, "ttr": ttr, "rep": rep}
+    out = _assemble(agg.display_name, title, None, year, "dataset", "", st, r, agg, row, complete=False)
+    out["has_sections"] = bool(has_sec)
+    return out
+
+
+def _assemble(
+    artist: str,
+    title: str,
+    album: str | None,
+    year: int | None,
+    source: str,
+    lyrics: str,
+    st: dict[str, Any],
+    r: dict[str, Any] | None,
+    agg: db.ArtistAggregate | None,
+    row: list[Any] | None,
+    *,
+    complete: bool = True,
+) -> dict[str, Any]:
+    st = {k: v for k, v in st.items() if k != "reading"}
     return {
         "artist": artist,
-        "title": song.title,
-        "album": song.album,
-        "year": song.year,
+        "title": title,
+        "album": album,
+        "year": year,
         "source": source,
-        "lyrics": song.lyrics,
-        "stats": st.to_dict(),
-        "analysis_complete": True,
-        "has_sections": any(k != "other" for k in st.section_kinds),
+        "lyrics": lyrics,
+        "stats": st,
+        "reading": r,
+        "analysis_complete": complete,
+        "has_sections": any(k != "other" for k in (st.get("section_kinds") or {})),
+        "catalogue": _catalogue(agg, row, r) if agg else None,
+        "percentiles": percentiles(r) if r else {},
+        "archive_songs": archive_songs(),
+        "slug": {"artist": db.slugify(artist), "title": db.slugify(title)},
     }
 
 
-def _dataset_song_payload(agg: db.ArtistAggregate, title: str) -> dict[str, Any] | None:
-    """Match a stored title without guessing between remixes or versions."""
-    try:
-        rows = json.loads(agg.songs_json or "[]")
-    except (ValueError, TypeError):
+def _catalogue(
+    agg: db.ArtistAggregate, row: list[Any] | None, r: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """Where the song sits among the artist's other songs, from the same
+    catalogue the artist page is built on: a rank (1 = highest) and a thinned
+    strip of every song's value, for words, variety and repetition."""
+    rows = _title_rows(agg)
+    if not rows:
         return None
-    if not isinstance(rows, list):
-        return None
-    for row in rows:
-        if not isinstance(row, list) or len(row) != 8 or not isinstance(row[0], str):
+    r = r or {}
+    out: dict[str, Any] = {
+        "artist": agg.display_name,
+        "songs": len(rows),
+        "in_catalogue": row is not None,
+    }
+    for name, idx, value in (("words", 2, r.get("wc")), ("variety", 4, r.get("ttr")), ("repetition", 6, r.get("rep"))):
+        vals = sorted(x[idx] for x in rows if isinstance(x[idx], (int, float)))
+        if not vals or value is None:
+            out[name] = None
             continue
-        stored_title, year, wc, uniq, ttr, chorus, repetition, has_sections = row
-        if stored_title.strip().casefold() != title.casefold():
-            continue
-        st = stats.SongStats(
-            word_count=wc,
-            unique_words=uniq,
-            type_token_ratio=ttr,
-            chorus_ratio=chorus,
-            repetition_ratio=repetition,
-        )
-        return {
-            "artist": agg.display_name,
-            "title": stored_title,
-            "album": None,
-            "year": year,
-            "source": "dataset",
-            "lyrics": "",
-            "stats": st.to_dict(),
-            "analysis_complete": False,
-            "has_sections": bool(has_sections),
+        if len(vals) > CATALOGUE_POINTS:
+            step = len(vals) / CATALOGUE_POINTS
+            points = [vals[int(i * step)] for i in range(CATALOGUE_POINTS)]
+        else:
+            points = vals
+        out[name] = {
+            "value": value,
+            "rank": sum(1 for v in vals if v > value) + 1,
+            "median": vals[len(vals) // 2],
+            "low": vals[0],
+            "high": vals[-1],
+            "points": points,
         }
-    return None
+    return out
+
+
+@app.get("/api/artist/titles")
+def artist_titles(name: str = Query(..., min_length=1, max_length=120)) -> dict[str, Any]:
+    """Every title we can open for an artist, for the song search box."""
+    agg = db.get_artist_aggregate(name)
+    if agg:
+        return {"name": agg.display_name, "titles": [r[0] for r in _title_rows(agg)]}
+    lb = db.find_artist_by_key(name)
+    if not lb:
+        return {"name": name, "titles": []}
+    return {"name": lb.name, "titles": db.list_titles(lb)}
 
 
 # ── artist ──────────────────────────────────────────────────────────────────

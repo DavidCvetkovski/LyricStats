@@ -34,6 +34,27 @@ cd web && vercel --prod  # deploy the frontend
 
 Custom domains: `lyricstats.dev` (frontend; `www` redirects to the apex) and `api.lyricstats.dev` (API). The frontend ships `sitemap.xml`, `robots.txt`, and canonical/OG metadata — see [web/README.md](web/README.md#seo).
 
+## The song page
+
+A song lives at `/song/<artist>/<title>`, slugs on both sides (`/song/michael-jackson/thriller`).
+The page is rendered on the server from one call to `/api/song?artist=…&title=…`, which takes
+names or slugs and answers with the text, its **reading** and where the song stands:
+
+- `lyricstats/reading.py` — the per-song numbers (words, distinct, repetition, the returning
+  line, title drops, rhyme, and from synced lyrics the clock: first word, longest silence,
+  busiest fifteen seconds, words per tenth). The LRCLIB importer folds the same function into
+  every catalogue, so a song page and its artist's catalogue agree to the digit.
+- `catalogue` — the song's rank among the artist's songs for words, variety and repetition,
+  from the same `songs_json` the artist page reads.
+- `percentiles` — the song against the whole archive, from `lyricstats/data/song_quantiles.json`.
+  Rebuild that table after a new import:
+
+  ```bash
+  uv run python scripts/build_song_quantiles.py   # ~30 s over data/lrclib/_song_stat.db
+  ```
+
+Old `/song?artist=…&title=…` links redirect to the slug address.
+
 ## Tests
 
 ```bash

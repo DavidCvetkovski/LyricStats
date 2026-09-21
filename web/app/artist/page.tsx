@@ -23,6 +23,7 @@ import { titleCase } from "@/lib/utils";
 import { ArtistAutocomplete } from "@/components/ArtistAutocomplete";
 import { MusicLinks } from "@/components/MusicLinks";
 import { verifiedMotif } from "@/lib/artistEvidence";
+import { songPath } from "@/lib/slug";
 
 const NON_NOUNS = new Set([
   // Auxiliary / Modal / Pronouns / Stop-words
@@ -507,6 +508,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
         artistName={data.name}
         stats={s}
         topFreqNoun={topFreqNoun}
+        motif={motif}
       />
 
       <HighlightsShowcase stats={s} artistName={data.name} />
@@ -678,7 +680,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
               </span>
               <div className="min-w-0">
                 <Link
-                  href={`/song?artist=${encodeURIComponent(data.name)}&title=${encodeURIComponent(song.title)}`}
+                  href={songPath(data.name, song.title)}
                   prefetch={false}
                   className="font-serif text-lg sm:text-xl text-ink hover:text-accent transition-colors leading-tight break-words hover:underline decoration-rule underline-offset-4 hover:decoration-accent"
                 >
@@ -735,7 +737,7 @@ function Highlight({
   if (artistName) {
     return (
       <Link
-        href={`/song?artist=${encodeURIComponent(artistName)}&title=${encodeURIComponent(title)}`}
+        href={songPath(artistName, title)}
         className="block no-underline"
       >
         {content}

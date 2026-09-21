@@ -27,8 +27,9 @@ from typing import Any, Callable, Iterator
 import requests
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from . import db
+from . import db, stats
 from .config import GENIUS_SCRAPE, GENIUS_TOKEN, ONLY_LRCLIB
+from .reading import reading
 
 log = logging.getLogger(__name__)
 
@@ -345,8 +346,32 @@ def _scrape_genius_lyrics(
         return None
 
 
-def _lrclib_lyrics(artist: str, title: str) -> tuple[str | None, str | None]:
-    """Plain lyrics from lrclib.net (no key). Returns (lyrics, album)."""
+@dataclass
+class LyricText:
+    """What a provider hands back: the words, and when it knows, the clock."""
+
+    lyrics: str | None
+    album: str | None = None
+    synced: str | None = None  # LRC text with [mm:ss.xx] line stamps
+    duration: float | None = None  # seconds
+
+
+def _lrclib_hit(j: dict[str, Any]) -> LyricText | None:
+    ly = (j.get("plainLyrics") or "").strip()
+    if not ly:
+        return None
+    synced = (j.get("syncedLyrics") or "").strip() or None
+    duration = j.get("duration")
+    return LyricText(
+        ly,
+        j.get("albumName"),
+        synced,
+        float(duration) if isinstance(duration, (int, float)) and duration > 0 else None,
+    )
+
+
+def _lrclib_lyrics(artist: str, title: str) -> LyricText:
+    """Plain (and, when available, synced) lyrics from lrclib.net, no key."""
     headers = {"User-Agent": _UA}
     try:
         r = requests.get(
@@ -356,11 +381,11 @@ def _lrclib_lyrics(artist: str, title: str) -> tuple[str | None, str | None]:
             timeout=10,
         )
         if r.status_code == 200:
-            j = r.json()
-            ly = (j.get("plainLyrics") or "").strip()
-            if ly:
-                return ly, j.get("albumName")
-        # Broader search fallback.
+            hit = _lrclib_hit(r.json())
+            if hit:
+                return hit
+        # Broader search fallback. Among usable hits, one whose title folds to
+        # the asked title wins, then one with a synced text, then the first.
         r = requests.get(
             "https://lrclib.net/api/search",
             params={"track_name": title, "artist_name": artist},
@@ -368,13 +393,21 @@ def _lrclib_lyrics(artist: str, title: str) -> tuple[str | None, str | None]:
             timeout=10,
         )
         if r.status_code == 200:
-            for it in r.json() or []:
-                ly = (it.get("plainLyrics") or "").strip()
-                if ly:
-                    return ly, it.get("albumName")
+            want = db.normalize_key(title)
+            hits = [(it, _lrclib_hit(it)) for it in r.json() or []]
+            hits = [(it, h) for it, h in hits if h]
+            for match in (
+                lambda it, h: db.normalize_key(it.get("trackName") or "") == want and h.synced,
+                lambda it, h: db.normalize_key(it.get("trackName") or "") == want,
+                lambda it, h: bool(h.synced),
+                lambda it, h: True,
+            ):
+                for it, h in hits:
+                    if match(it, h):
+                        return h
     except requests.RequestException:
         pass
-    return None, None
+    return LyricText(None)
 
 
 def _ovh_lyrics(artist: str, title: str) -> str | None:
@@ -397,17 +430,18 @@ def get_lyrics(
     song_url: str | None = None,
     song_id: int | None = None,
     allow_scrape: bool | None = None,
-) -> tuple[str | None, str, str | None]:
-    """Best-effort lyric text. Returns (lyrics, source, album).
+) -> tuple[str | None, str, LyricText]:
+    """Best-effort lyric text. Returns (lyrics, source, text), where `text`
+    also carries the album and, from lrclib, the synced lines and duration.
 
     Order: Genius scrape (if allowed) → lrclib → lyrics.ovh.
     `source` is one of "genius" | "lrclib" | "ovh" | "none".
     """
     if ONLY_LRCLIB:
-        ly, album = _lrclib_lyrics(artist, title)
-        if ly:
-            return ly, "lrclib", album
-        return None, "none", None
+        hit = _lrclib_lyrics(artist, title)
+        if hit.lyrics:
+            return hit.lyrics, "lrclib", hit
+        return None, "none", LyricText(None)
 
     if allow_scrape is None:
         allow_scrape = GENIUS_SCRAPE
@@ -415,17 +449,37 @@ def get_lyrics(
     if allow_scrape and (song_url or song_id):
         ly = _scrape_genius_lyrics(song_url=song_url, song_id=song_id, title=title)
         if ly:
-            return ly, "genius", None
+            # Genius has the section tags but no clock; lrclib may have both
+            # the stamps and the length for the same recording.
+            timed = _lrclib_lyrics(artist, title)
+            return ly, "genius", LyricText(ly, None, timed.synced, timed.duration)
 
-    ly, album = _lrclib_lyrics(artist, title)
-    if ly:
-        return ly, "lrclib", album
+    hit = _lrclib_lyrics(artist, title)
+    if hit.lyrics:
+        return hit.lyrics, "lrclib", hit
 
     ly2 = _ovh_lyrics(artist, title)
     if ly2:
-        return ly2, "ovh", None
+        return ly2, "ovh", LyricText(ly2)
 
-    return None, "none", None
+    return None, "none", LyricText(None)
+
+
+def save_song_stats(row: db.Song, text: LyricText | None = None) -> dict:
+    """Compute and cache a song's numbers: the section-aware SongStats plus
+    the `reading` every song page is set from. Called once, when the lyrics
+    are stored, because the clock needs the synced text we don't keep."""
+    payload = stats.compute(row.lyrics).to_dict()
+    r = reading(
+        row.title,
+        row.lyrics,
+        text.synced if text else None,
+        text.duration if text else None,
+    )
+    if r:
+        payload["reading"] = r
+    db.save_stats(row, payload)
+    return payload
 
 
 # ── public API ──────────────────────────────────────────────────────────────
@@ -468,7 +522,7 @@ def fetch_song(artist: str, title: str, *, force: bool = False) -> FetchedSong:
     song_url = meta.get("url") if meta else None
     song_id = meta.get("id") if meta else None
 
-    lyrics, source, album = get_lyrics(
+    lyrics, source, text = get_lyrics(
         canon_artist, canon_title, song_url=song_url, song_id=song_id
     )
     if not lyrics:
@@ -485,10 +539,11 @@ def fetch_song(artist: str, title: str, *, force: bool = False) -> FetchedSong:
         a,
         title=canon_title,
         lyrics=lyrics,
-        album=album or (meta.get("album") if meta else None),
+        album=text.album or (meta.get("album") if meta else None),
         year=meta.get("year") if meta else None,
         genius_id=song_id,
     )
+    save_song_stats(row, text)
     return FetchedSong(
         artist=a.name,
         title=row.title,
@@ -571,18 +626,20 @@ def fetch_one_by_id(
                     s.commit()
         return True
 
-    lyrics, _source, src_album = get_lyrics(artist.name, title, song_url=song_url, song_id=song_id)
+    lyrics, _source, text = get_lyrics(artist.name, title, song_url=song_url, song_id=song_id)
     # Save empty lyrics to mark as attempted so we don't repeat the fetch
     if not lyrics:
         lyrics = ""
-    db.upsert_song(
+    row = db.upsert_song(
         artist,
         title=title,
         lyrics=lyrics,
-        album=src_album or album,
+        album=text.album or album,
         year=year,
         genius_id=int(song_id) if song_id else None,
     )
+    if lyrics:
+        save_song_stats(row, text)
     return True
 
 

@@ -3,7 +3,7 @@ import { MemoryCacheStore } from "./cache";
 import { artistKey } from "./utils";
 
 // In production NEXT_PUBLIC_API_BASE points at the Vercel Python API project
-// (e.g. https://lyricstats-api.vercel.app), so the browser calls it directly
+// (e.g. https://api.lyricstats.dev), so the browser calls it directly
 // (CORS is allowed for *.vercel.app). Empty → relative paths, which works for
 // local dev where the FastAPI process is proxied via Next's /api/* rewrite.
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
@@ -19,18 +19,28 @@ async function get<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** One song by name or slug. Song pages fetch on the server (lib/server.ts);
+ * this is for anything that needs a reading in the browser. */
 export function getSong(
   artist: string,
   title: string,
-  opts?: { force?: boolean; full?: boolean; signal?: AbortSignal },
+  opts?: { force?: boolean; signal?: AbortSignal },
 ): Promise<SongPayload> {
   const q = new URLSearchParams({ artist, title });
   if (opts?.force) q.set("force", "1");
-  if (opts?.full) q.set("full", "1");
   return get<SongPayload>(`/api/song?${q.toString()}`, {
     signal: opts?.signal,
     ...(opts?.force ? { cache: "no-store" } : {}),
   });
+}
+
+/** Every title we can open for an artist, for the song search box. */
+export function getArtistTitles(
+  name: string,
+  signal?: AbortSignal,
+): Promise<{ name: string; titles: string[] }> {
+  const q = new URLSearchParams({ name });
+  return get(`/api/artist/titles?${q.toString()}`, { signal });
 }
 
 // ── artist typeahead ───────────────────────────────────────────────────────

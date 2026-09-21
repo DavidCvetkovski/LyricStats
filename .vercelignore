@@ -2,7 +2,8 @@
 # Next.js frontend (that ships as a separate Vercel project rooted at web/).
 web/
 .venv/
-data/
+# Only the top-level data directory: lyricstats/data/ ships the song quantiles.
+/data/
 tests/
 pages/
 streamlit_app.py
@@ -15,3 +16,5 @@ Dockerfile
 pyproject.toml
 uv.lock
 *.db
+.tmp/
+.git/

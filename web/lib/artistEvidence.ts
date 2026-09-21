@@ -1,5 +1,5 @@
 import type { ArtistPayload, ArtistStats } from './types';
-import { wordsIn } from './reading';
+import { wordsIn } from './utils';
 
 /** A quote may only decorate the word and catalogue it actually belongs to. */
 export function verifiedMotif(data: ArtistPayload) {

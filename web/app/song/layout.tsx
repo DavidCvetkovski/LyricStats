@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 
-// The song page is a client component, so its metadata lives here.
+// The search page is a client component, so its metadata lives here. Song
+// pages under /song/<artist>/<title> set their own.
 export const metadata: Metadata = {
-  title: "A Close Reading",
+  title: "On a Song",
   description:
-    "Explore a song’s returning lines, written shape and unfolding vocabulary. Search for a song or read your own text privately in your browser.",
+    "One song, read closely: its returning line, the clock of its lyrics, its words, and where it stands in the artist’s catalogue and among millions of songs.",
   alternates: {
     canonical: "/song",
   },
@@ -12,9 +13,9 @@ export const metadata: Metadata = {
     siteName: "LyricStats",
     type: "website",
     url: "/song",
-    title: "A Close Reading · LyricStats",
+    title: "On a Song · LyricStats",
     description:
-      "Explore a song’s returning lines, written shape and unfolding vocabulary. Search for a song or read your own text privately in your browser.",
+      "One song, read closely: its returning line, the clock of its lyrics, its words, and where it stands among millions of songs.",
   },
 };
 

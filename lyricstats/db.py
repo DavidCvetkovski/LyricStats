@@ -38,6 +38,18 @@ def normalize_key(name: str) -> str:
     return "".join(c for c in s if c.isalnum())
 
 
+def slugify(name: str) -> str:
+    """URL slug for a name: accents stripped, lowercased, one hyphen between
+    runs of letters and digits. 'Beyoncé' → 'beyonce', "HUMBLE." → 'humble'.
+    Mirrors slugify() in web/lib/slug.ts, and folds to the same normalize_key
+    when its hyphens are dropped, which is how a slug is matched again.
+    """
+    s = unicodedata.normalize("NFKD", name or "")
+    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
+    s = "".join(c if c.isalnum() else "-" for c in s)
+    return "-".join(part for part in s.split("-") if part)
+
+
 class Artist(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
@@ -248,6 +260,40 @@ def list_songs(artist: Artist) -> list[Song]:
         return list(s.exec(select(Song).where(Song.artist_id == artist.id)).all())
 
 
+def find_artist_by_key(name: str) -> Artist | None:
+    """A lyrics-backed artist by name or by its slug ('jay-z' finds 'jay-z',
+    'Jay-Z' and 'jay z'). Exact names cost one indexed read; slugs compare the
+    aggressive key over the artists sharing a first character."""
+    exact = get_artist(name)
+    if exact:
+        return exact
+    key = normalize_key(name)
+    if not key:
+        return None
+    with read_session() as s:
+        rows = s.exec(select(Artist).where(Artist.name.like(f"{key[0]}%"))).all()  # type: ignore[attr-defined]
+    for row in rows:
+        if normalize_key(row.name) == key:
+            return row
+    return None
+
+
+def find_song_by_key(artist: Artist, title: str) -> Song | None:
+    """A cached song of `artist` whose title folds to the same key as `title`
+    (so a slug finds it), skipping rows that only record a failed fetch."""
+    key = normalize_key(title)
+    if not key:
+        return None
+    with read_session() as s:
+        rows = s.exec(select(Song.id, Song.title).where(Song.artist_id == artist.id)).all()
+        for song_id, song_title in rows:
+            if normalize_key(song_title) == key:
+                row = s.get(Song, song_id)
+                if row and row.lyrics.strip():
+                    return row
+    return None
+
+
 def save_stats(song: Song, stats: dict) -> None:
     with session() as s:
         row = s.get(Song, song.id)
@@ -422,3 +468,12 @@ def load_aggregate_stats(agg: "ArtistAggregate") -> dict | None:
         return json.loads(agg.stats_json)
     except json.JSONDecodeError:
         return None
+
+
+def list_titles(artist: Artist) -> list[str]:
+    """Titles of an artist's cached songs that have text, without the text."""
+    with read_session() as s:
+        rows = s.exec(
+            select(Song.title).where(Song.artist_id == artist.id, Song.lyrics != "")
+        ).all()
+    return sorted(set(rows))

@@ -31,5 +31,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly",
       priority: 0.8,
     },
+    // The readings the song page opens with.
+    ...["michael-jackson/thriller", "queen/bohemian-rhapsody", "kendrick-lamar/humble"].map(
+      (path) => ({
+        url: `${SITE_URL}/song/${path}`,
+        lastModified,
+        changeFrequency: "monthly" as const,
+        priority: 0.6,
+      }),
+    ),
   ];
 }

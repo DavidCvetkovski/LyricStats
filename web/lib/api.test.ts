@@ -67,17 +67,19 @@ describe("api client library", () => {
     });
   });
 
-  it("requests the full song analysis while retaining HTTP caching", async () => {
-    const { getSong } = await import("./api");
-    const controller = new AbortController();
-    vi.mocked(fetch).mockResolvedValue({ ok: true, json: async () => ({}) } as Response);
+  it("asks for an artist's titles by name", async () => {
+    const { getArtistTitles } = await import("./api");
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ name: "Michael Jackson", titles: ["Thriller"] }),
+    } as Response);
 
-    await getSong("Artist", "Title", { full: true, signal: controller.signal });
+    const out = await getArtistTitles("michael jackson");
 
     const [url, options] = vi.mocked(fetch).mock.calls[0];
-    expect(url).toContain("full=1");
-    expect(url).not.toContain("force=");
-    expect(options).toMatchObject({ cache: "default", signal: controller.signal });
+    expect(url).toContain("/api/artist/titles?name=michael+jackson");
+    expect(options).toMatchObject({ cache: "default" });
+    expect(out.titles).toEqual(["Thriller"]);
   });
 
   it("handles getArtistPool query parameters correctly", async () => {

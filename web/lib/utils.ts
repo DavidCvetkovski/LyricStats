@@ -14,3 +14,8 @@ export function artistKey(s: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
 }
+
+/** Lower-case word tokens, any script; apostrophes stay inside a word. */
+export function wordsIn(text: string): string[] {
+  return text.normalize("NFC").toLowerCase().match(/\p{L}+(?:['’]\p{L}+)*/gu) ?? [];
+}

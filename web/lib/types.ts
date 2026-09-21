@@ -23,17 +23,76 @@ export type SongStats = {
   profanity_count: number;
 };
 
+/**
+ * The numbers a song is read by (lyricstats/reading.py). Everything comes
+ * from the text; the clock fields need synced lyrics and are null without.
+ * A catalogue-only summary carries just wc, uniq, ttr and rep.
+ */
+export type Reading = {
+  wc: number;
+  uniq: number;
+  ttr: number;
+  rep: number;
+  hook?: number;
+  top_line?: string;
+  top_line_n?: number;
+  top_line_at?: number[];
+  drops?: number;
+  q?: number;
+  excl?: number;
+  one_word?: number;
+  rhyme?: number;
+  longest_word?: string;
+  awl?: number;
+  wpm?: number | null;
+  first?: number | null;
+  gap?: number | null;
+  gap_at?: number | null;
+  fast15?: number | null;
+  curve?: number[] | null;
+  last?: number | null;
+  line_count?: number;
+  line_words?: number[];
+  once?: number;
+  duration?: number | null;
+};
+
+/** One metric of the song against the artist's whole catalogue. */
+export type CatalogueMetric = {
+  value: number;
+  rank: number; // 1 = the highest in the catalogue
+  median: number;
+  low: number;
+  high: number;
+  points: number[]; // every song's value, sorted (thinned for huge catalogues)
+};
+
+export type Catalogue = {
+  artist: string;
+  songs: number;
+  in_catalogue: boolean;
+  words: CatalogueMetric | null;
+  variety: CatalogueMetric | null;
+  repetition: CatalogueMetric | null;
+};
+
 export type SongPayload = {
   artist: string;
   title: string;
   album: string | null;
   year: number | null;
-  source: "cache" | "genius" | "lrclib" | "ovh" | "dataset" | "local";
-  /** False for a catalogue summary; only its five stored metrics are available. */
-  analysis_complete?: boolean;
-  has_sections?: boolean;
+  source: "cache" | "genius" | "lrclib" | "ovh" | "dataset";
+  /** False when no provider had the text and only the catalogue's figures are known. */
+  analysis_complete: boolean;
+  has_sections: boolean;
   lyrics: string;
   stats: SongStats;
+  reading: Reading | null;
+  catalogue: Catalogue | null;
+  /** Share of archive songs below this one, per metric of the reading. */
+  percentiles: Partial<Record<keyof Reading, number>>;
+  archive_songs: number;
+  slug: { artist: string; title: string };
 };
 
 export type SongMeta = {

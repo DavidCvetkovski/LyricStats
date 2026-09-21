@@ -235,25 +235,197 @@ input[type="number"].field::-webkit-inner-spin-button {
   outline-offset: 4px;
 }
 
-/* A score in ink: shared motion and reading instruments. */
-.editorial-reveal { opacity: .01; transform: translateY(22px); transition: opacity 850ms ease, transform 850ms cubic-bezier(.2,.7,.2,1); }
-.editorial-reveal.is-visible { opacity: 1; transform: none; }
-.reading-link { text-decoration: underline; text-decoration-color: var(--rule-strong); text-underline-offset: 5px; }
-.reading-link:hover { color: var(--accent); }
-.reading-switch { display:flex; flex-wrap:wrap; border-bottom:1px solid var(--rule-strong); gap:1.5rem; }
-.reading-switch button { padding:.7rem 0; font-size:.72rem; letter-spacing:.06em; cursor:pointer; color:var(--ink-mute); }
-.reading-switch button[aria-pressed="true"] { color:var(--accent); box-shadow:0 2px 0 var(--accent); }
-.line-score { height:140px; display:flex; align-items:flex-end; gap:3px; overflow-x:auto; padding:8px 0; }
-.line-score button { flex:1 0 5px; min-width:5px; cursor:pointer; transition:height 600ms ease,opacity 180ms,background 180ms; border-radius:2px 2px 0 0; }
-.line-score button:hover { opacity:1!important; }
-.echo-return { display:grid; place-items:center; height:38px; min-width:38px; padding:4px; border:1px solid var(--rule-strong); font-family:var(--font-serif); color:var(--accent); }
-.echo-return:hover { background:var(--paper-deep); }
-.word-chip { display:flex; align-items:baseline; gap:12px; padding:8px 14px; border:1px solid var(--rule-strong); font-family:var(--font-serif); font-size:1.2rem; cursor:pointer; transition:background .2s,color .2s; }
-.word-chip small { font-family:var(--font-sans); font-size:.65rem; opacity:.7; }
-.word-chip.is-active { background:var(--ink); color:var(--paper); }
-.vocabulary-stroke { stroke-dasharray:1; stroke-dashoffset:1; transition:stroke-dashoffset 1800ms ease; }
-.is-visible .vocabulary-stroke { stroke-dashoffset:0; }
-@media (prefers-reduced-motion:reduce) { .editorial-reveal {opacity:1;transform:none;} .vocabulary-stroke{stroke-dashoffset:0;} }
+/* ── Shared motion: a section rises into view once, when first scrolled to */
+.editorial-reveal {
+  opacity: 0.01;
+  transform: translateY(22px);
+  transition: opacity 850ms ease, transform 850ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.editorial-reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+.reading-link {
+  text-decoration: underline;
+  text-decoration-color: var(--rule-strong);
+  text-underline-offset: 5px;
+}
+.reading-link:hover {
+  color: var(--accent);
+}
+
+/* ── The song page ────────────────────────────────────────────────────── */
+
+/* The song as a row of lines, first to last; the returning line in oxblood. */
+.song-strip {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 180px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+.song-strip > span {
+  flex: 1 1 0;
+  min-width: 1px;
+  background: var(--paper-deep);
+  border-radius: 1px 1px 0 0;
+  transform-origin: bottom;
+  transition: transform 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.song-strip > span.is-hook {
+  background: var(--accent);
+}
+.editorial-reveal:not(.is-visible) .song-strip > span {
+  transform: scaleY(0);
+}
+
+/* The clock: words per tenth of the recording, on the song's own minutes. */
+.song-clock .bar {
+  fill: var(--ink);
+  opacity: 0.82;
+}
+.song-clock .silence {
+  fill: var(--accent);
+  opacity: 0.12;
+}
+.song-clock .axis {
+  stroke: var(--rule-strong);
+  stroke-width: 1;
+}
+.song-clock .marker {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+.song-clock .tick {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  fill: var(--ink-mute);
+}
+.song-clock .label {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  fill: var(--accent);
+}
+
+/* Bands: every song of the artist placed by its figure, this one in oxblood. */
+.song-band {
+  position: relative;
+  height: 36px;
+  margin-top: 10px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+.song-band > i {
+  position: absolute;
+  bottom: 5px;
+  width: 3px;
+  height: 16px;
+  margin-left: -1.5px;
+  background: var(--ink);
+  opacity: 0.1;
+}
+.song-band > .median {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 36px;
+  background: var(--ink-mute);
+}
+.song-band > .me {
+  position: absolute;
+  bottom: 2px;
+  width: 10px;
+  height: 26px;
+  margin-left: -5px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--paper);
+}
+
+/* Rulers: the archive from smallest to largest, the mark at the percentile. */
+.song-ruler {
+  position: relative;
+  height: 18px;
+}
+.song-ruler::before {
+  content: "";
+  position: absolute;
+  inset: 9px 0 auto 0;
+  height: 1px;
+  background: var(--rule-strong);
+}
+.song-ruler::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  width: 1px;
+  height: 11px;
+  background: var(--rule-strong);
+}
+.song-ruler > i {
+  position: absolute;
+  top: 2px;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--paper);
+  transition: left 900ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.editorial-reveal:not(.is-visible) .song-ruler > i {
+  left: 0 !important;
+}
+
+/* The text, folded away; the returning line underlined in oxblood. */
+.song-text summary {
+  list-style: none;
+}
+.song-text summary::-webkit-details-marker {
+  display: none;
+}
+.song-text summary::before {
+  content: "+ ";
+  color: var(--accent);
+}
+.song-text[open] summary::before {
+  content: "– ";
+}
+.song-hook-line {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
+}
+
+/* While a song page is fetched: a hairline that breathes. */
+.song-loading {
+  width: 120px;
+  height: 2px;
+  background: var(--accent);
+  animation: breathe 1.6s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%, 100% { opacity: 0.25; transform: scaleX(0.4); }
+  50% { opacity: 1; transform: scaleX(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editorial-reveal {
+    opacity: 1;
+    transform: none;
+  }
+  .editorial-reveal:not(.is-visible) .song-strip > span {
+    transform: none;
+  }
+  .editorial-reveal:not(.is-visible) .song-ruler > i {
+    left: auto;
+  }
+}
 
 /* Publication chrome: journal navigation belongs to the masthead. */
 .masthead { border-bottom: 1px solid var(--rule-strong); }

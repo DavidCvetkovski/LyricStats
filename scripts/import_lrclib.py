@@ -43,7 +43,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from lyricstats import db  # noqa: E402
 from lyricstats.stats import STOPWORDS  # noqa: E402
-from lyricstats.text import TOKEN_RE  # noqa: E402
 from import_dataset import (  # noqa: E402
     _DEMO_KW,
     decode_tokens,
@@ -64,122 +63,12 @@ ARTIST_BLOCKLIST_SUBSTR = (
     "unknown artist", "genius", "translation",
 )
 
-# [mm:ss.xx] or [m:ss] timestamps at the start of a synced-lyrics line.
-LRC_TS_RE = re.compile(r"\[(\d+):(\d{2})(?:[.:](\d{1,3}))?\]")
+# The per-song numbers live in the package so the API reads a live song with
+# exactly the code that built the catalogue. Re-exported here for the tests
+# and for anyone who still imports them from this script.
+from lyricstats.reading import parse_synced, song_stats  # noqa: E402, F401
 
-MAX_SONG_WORDS = 2000
-MIN_DURATION_FOR_WPM = 30  # seconds
-TOP_N = 20
-
-
-# ── per-song stats ───────────────────────────────────────────────────────────
-
-
-def _norm_line(ln: str) -> str:
-    return " ".join(ln.lower().split())
-
-
-def _line_ending(ln: str) -> str:
-    """Last 3 letters of a line, lowercased and diacritics-stripped, for the
-    crude end-rhyme match (š→s, ć→c, … so 'noći'/'oči' style pairs count)."""
-    s = unicodedata.normalize("NFKD", ln.lower())
-    letters = [c for c in s if c.isalpha() and not unicodedata.combining(c)]
-    return "".join(letters[-3:])
-
-
-def parse_synced(synced: str, duration: float | None) -> dict | None:
-    """Timing stats from LRC text: (seconds, word-count) per line."""
-    events: list[tuple[float, int]] = []
-    for raw in synced.split("\n"):
-        m = LRC_TS_RE.match(raw.strip())
-        if not m:
-            continue
-        frac = (m.group(3) or "0").ljust(3, "0")[:3]
-        ts = int(m.group(1)) * 60 + int(m.group(2)) + int(frac) / 1000
-        words = len(TOKEN_RE.findall(raw[m.end():]))
-        events.append((ts, words))
-    events = [e for e in events if e[1] > 0]
-    if len(events) < 4:
-        return None
-    events.sort()
-    total = duration if duration and duration >= events[-1][0] else events[-1][0] + 5
-    first = round(events[0][0], 1)
-    gaps = [b[0] - a[0] for a, b in zip(events, events[1:])]
-    longest_gap = round(max(gaps), 1) if gaps else 0.0
-    # densest 15-second window
-    fastest15, j = 0, 0
-    for i in range(len(events)):
-        while events[i][0] - events[j][0] > 15:
-            j += 1
-        fastest15 = max(fastest15, sum(w for _, w in events[j:i + 1]))
-    # words per decile of the song
-    curve = [0] * 10
-    for ts, w in events:
-        curve[min(9, int(ts / total * 10))] += w
-    return {"first": first, "gap": longest_gap, "fast15": fastest15,
-            "curve": ",".join(map(str, curve))}
-
-
-def song_stats(title: str, plain: str, synced: str | None,
-               duration: float | None) -> dict | None:
-    """All per-song numbers from plain lyrics (+synced when available)."""
-    lines = [ln.strip() for ln in plain.split("\n")]
-    lines = [ln for ln in lines if ln]
-    if not lines:
-        return None
-    toks = TOKEN_RE.findall(" ".join(lines).lower())
-    wc = len(toks)
-    if wc == 0 or wc > MAX_SONG_WORDS:
-        return None
-    cnt = Counter(toks)
-    nl = len(lines)
-
-    norm = [_norm_line(ln) for ln in lines]
-    line_freq = Counter(norm)
-    top_line, top_line_n = line_freq.most_common(1)[0]
-    hook_lines = sum(c for c in line_freq.values() if c >= 3)
-    uniq_lines = len(line_freq)
-
-    # title drops: the normalised title phrase appearing in the lyrics
-    t_norm = _norm_line(re.sub(r"[\(\[].*?[\)\]]", "", title))
-    drops = 0
-    if 3 <= len(t_norm) <= 60 and len(t_norm.split()) <= 6:
-        drops = _norm_line(plain).count(t_norm)
-
-    q = sum(1 for ln in lines if ln.rstrip().endswith("?"))
-    excl = sum(1 for ln in lines if ln.rstrip().endswith("!"))
-    one_word = sum(1 for ln in norm if len(ln.split()) == 1)
-
-    endings = [_line_ending(ln) for ln in lines]
-    pairs = [(a, b) for a, b in zip(endings, endings[1:]) if len(a) == 3 and len(b) == 3]
-    rhyme = round(sum(1 for a, b in pairs if a == b) / len(pairs), 4) if pairs else 0.0
-
-    wpm = None
-    if duration and duration >= MIN_DURATION_FOR_WPM:
-        wpm = round(wc / (duration / 60), 1)
-
-    sy = parse_synced(synced, duration) if synced else None
-
-    longest = max(cnt, key=len)
-    return {
-        "wc": wc, "uniq": len(cnt), "ttr": round(len(cnt) / wc, 4),
-        "rep": round(1 - uniq_lines / nl, 4),
-        "hook": round(hook_lines / nl, 4),
-        "top_line": top_line if top_line_n >= 3 else "",
-        "top_line_n": top_line_n,
-        "drops": drops,
-        "q": round(q / nl, 4), "excl": round(excl / nl, 4),
-        "one_word": round(one_word / nl, 4),
-        "rhyme": rhyme,
-        "longest_word": longest,
-        "awl": round(sum(map(len, toks)) / wc, 2),
-        "wpm": wpm,
-        "first": sy["first"] if sy else None,
-        "gap": sy["gap"] if sy else None,
-        "fast15": sy["fast15"] if sy else None,
-        "curve": sy["curve"] if sy else None,
-        "cnt": cnt,
-    }
+TOP_N = 100
 
 
 # ── language id ──────────────────────────────────────────────────────────────
@@ -418,12 +307,19 @@ def _dedupe_songs(rows: list[dict], toks: list[Counter]) -> list[int]:
 
     first_by_title: dict[str, int] = {}
     first_by_fp: dict[tuple, int] = {}
+    
+    # Generic titles that shouldn't bridge distinct songs
+    artist_squash = _alnum_squash(rows[0]["artist"]) if rows and rows[0]["artist"] else ""
+    
     for i, r in enumerate(rows):
         tk = canonical_title(r["title"], r["artist"])
-        if tk in first_by_title:
-            union(i, first_by_title[tk])
-        else:
-            first_by_title[tk] = i
+        # Only merge by title if the title is meaningful (not just the artist name or tiny string)
+        if tk and len(tk) >= 3 and tk != artist_squash:
+            if tk in first_by_title:
+                union(i, first_by_title[tk])
+            else:
+                first_by_title[tk] = i
+                
         fp = content_fingerprint(toks[i])
         if fp is not None:
             if fp in first_by_fp:
@@ -445,8 +341,17 @@ def _dedupe_songs(rows: list[dict], toks: list[Counter]) -> list[int]:
         if not candidates:
             shortest_title = rows[best_i]["title"] or ""
         else:
+            freq = Counter(candidates)
             def title_score(title):
+                # We want a reasonably short, clean title, but not junk like '.' or 'Live'
+                t_squash = _alnum_squash(title)
+                if len(t_squash) < 3 or title.lower() == rows[best_i]["artist"].lower():
+                    return -999999 # Heavily penalize junk/artist names
+                    
                 score = -len(title)
+                # Boost based on how many times this exact title variant was uploaded
+                score += (freq[title] * 5)
+                
                 if re.search(r'[a-z][A-Z]', title):
                     score -= 100
                 return score
@@ -785,10 +690,10 @@ def corpus_pass(aggs: list[tuple]) -> None:
             mine = c / my_total * 1000
             theirs = (corpus_freq.get(w, 0) / corpus_total * 1000) or 0.0005
             ratio = mine / theirs
-            if ratio >= 3:
+            if ratio >= 2:
                 sig.append([w, c, round(ratio, 1)])
-        stats["signature_words"] = sorted(sig, key=lambda x: -x[2])[:10]
-        stats["exclusive_words"] = sorted(excl, key=lambda x: -x[1])[:10]
+        stats["signature_words"] = sorted(sig, key=lambda x: -x[2])[:150]
+        stats["exclusive_words"] = sorted(excl, key=lambda x: -x[1])[:50]
         stats["percentiles"] = {k: pctl(k, stats.get(k)) for k in PCTL_KEYS}
     conn.close()
     print(f"  phase 3 done in {time.time() - t0:.0f}s", flush=True)
