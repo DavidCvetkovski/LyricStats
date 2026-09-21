@@ -12,7 +12,7 @@ const EN_GRAMMAR =
   "won't can't couldn't wouldn't shouldn't isn't aren't wasn't weren't ain't i'm i've i'll i'd " +
   "you're you've you'll you'd he's she's it's we're we've we'll they're they've they'll that's " +
   "there's here's what's who's let's than then so too very just only also yeah yes oh ah uh well " +
-  "okay ok hey gonna wanna gotta gimme lemme cause 'cause";
+  "okay ok hey gonna wanna gotta gimme lemme cause 'cause gon bout 'bout tryna finna imma ima cuz 'em";
 // English words that carry little on their own: set aside when choosing one word to stand for a catalogue.
 const EN_GENERIC =
   "go goes going gone went come comes came coming get gets got getting gotten let make made making " +
@@ -35,13 +35,21 @@ const LISTS = [
     "pre poslije posle mogu možeš može hoću hoćeš hoće neću nećeš neće nisam nisi nismo niste nisu " +
     "imaš ima imamo imate imaju znaš zna znamo znate znaju šta sta kada zar li bi bih bismo biste " +
     "neka eto evo ajde hajde daj ma ej hej joj jao jel jeli čega čemu kome koga koji koja koje kojoj " +
-    "kojem mene tebe",
+    "kojem mene tebe zbog nje nju njoj njemu njega njih svaki svaka svako svakog malo mnom tobom",
   // Spanish
   "que de la el y no en un mi te tu es me se por lo con para una los más si yo como pero del al las " +
-    "todo mas nada ya sin eres soy está estoy",
+    "todo mas nada ya sin eres soy está estoy qué porque cuando donde dónde cómo quién eso esto esta " +
+    "este ese esa ella ellos ellas él nosotros usted hasta hay aquí ahí allí así ahora siempre nunca " +
+    "también muy mucho poco otra otro otros otras cada algo alguien nadie mismo misma entre desde " +
+    "sobre hacia contra les nos sus tus mis mío mía tuyo tuya conmigo contigo ser estar fue estás " +
+    "están voy vas vamos van hace hacer quiero quieres quiere tengo tienes tiene sabes puedo puedes puede " +
+    "ere vamo ver dice digo hago",
   // Portuguese
   "que de não eu você um uma o a em do da é com para se me meu minha mais tudo vou tá pra sem ele " +
-    "ela nao voce ta te já só isso",
+    "ela nao voce ta te já só isso porque quando onde como quem isto essa esse esta este aqui agora " +
+    "sempre nunca também muito pouco outra outro cada algo alguém ninguém mesmo entre desde sobre nos " +
+    "seu sua seus suas teu tua comigo contigo sou ser estar foi são somos estão tô vai vamos vão faz " +
+    "fazer quero quer sei sabe tem tenho ter vem",
   // French
   "je tu le la les et pas que de un une des dans ne me te pour qui mais mon ma sur est on moi toi " +
     "avec tout j'ai c'est t'as plus vous nous il elle ils elles se ce cette ces son sa ses leur au " +
@@ -51,10 +59,16 @@ const LISTS = [
     "sind aber für nur wenn mein kann noch doch schon mal denn dann weil oder auch immer nie hier " +
     "dort wo wer warum sich uns euch ihr ihn ihm ihnen sein seine meine dein deine kein keine alle " +
     "alles nichts etwas jeder jede hat haben war waren wird werden muss will soll bin bist seid eine " +
-    "einen einem einer dem des vom zum zur ins ans bei nach vor über unter durch ohne gegen",
+    "einen einem einer dem des vom zum zur ins ans bei nach vor über unter durch ohne gegen aus von " +
+    "mehr hab habe hast hatte hätte kommt komm kommen gehen geht geh ganz gar sehr viel viele wieder " +
+    "nun jetzt heute bis als dies diese dieser dieses ihre unser unsere sag sagen sagt weiß weißt gibt " +
+    "lass lassen machen macht mach willst kannst können könnte musst müssen würde wär wäre sei selbst " +
+    "hin weg zurück nein",
   // Italian
   "che non di la il mi un per ti è se e come ma sei con una io tu ho più sono del quando ci le mai " +
-    "così sto già",
+    "così sto già cosa perché ancora sempre niente tutto tutti questo questa quello quella anche dopo " +
+    "prima voglio vuoi vuole sai posso puoi può hai siamo siete stato stata mio mia tuo tua suo sua " +
+    "nostro loro lei lui noi voi cui ogni poi qui qua",
 ];
 
 const FILLER = new Set(LISTS.join(" ").split(/\s+/).filter(Boolean));

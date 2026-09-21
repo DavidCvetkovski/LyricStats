@@ -9,11 +9,14 @@ export function WordTable({
   rows,
   max = 10,
   motifWord,
+  unit,
 }: {
   title: string;
   rows: Entry[];
   max?: number;
   motifWord?: string;
+  /** What the figures count, shown at the head of the column. */
+  unit?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const top = rows[0]?.[1] ?? 1;
@@ -22,7 +25,11 @@ export function WordTable({
     <section>
       <header className="mb-4 flex items-baseline justify-between">
         <h3 className="display text-2xl sm:text-3xl">{title}</h3>
-        <span className="smallcaps text-ink-mute opacity-0 select-none pointer-events-none">{rows.length} words</span>
+        {unit ? (
+          <span className="smallcaps">{unit}</span>
+        ) : (
+          <span className="smallcaps text-ink-mute opacity-0 select-none pointer-events-none">{rows.length} words</span>
+        )}
       </header>
       <ol className="border-t border-rule-strong">
         {rows.map(([word, n], i) => {

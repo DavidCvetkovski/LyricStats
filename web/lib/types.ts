@@ -125,6 +125,8 @@ export type Signature = {
   words: [string, number, number][];
   /** The word they say most, grammar and ad-libs set aside. */
   staple: { word: string; songs: number; uses: number; share: number } | null;
+  /** [word, songs, uses], the words said most (each in more than one song). */
+  staples?: [string, number, number][];
   curated: boolean;
 };
 

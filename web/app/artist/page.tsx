@@ -378,7 +378,11 @@ function ArtistView({ data }: { data: ArtistPayload }) {
   // Dataset aggregates have no per-song catalogue to show.
   const hasCatalogue = data.songs.length > 0;
   const signature = s.signature ?? null;
-  const staples = vocabulary(s.top_words_no_stop);
+  // The signature pass keeps the 25 words said most; older rows only have
+  // the stored top twenty, which grammar thins to a handful.
+  const staples = signature?.staples?.length
+    ? vocabulary(signature.staples.map(([word, , uses]): [string, number] => [word, uses]))
+    : vocabulary(s.top_words_no_stop);
 
   return (
     <article ref={containerRef} className="mt-16 rise">
@@ -428,7 +432,7 @@ function ArtistView({ data }: { data: ArtistPayload }) {
           <div className="grid gap-12 lg:grid-cols-2 lg:gap-20 items-start">
             {staples.length > 0 && (
               <div>
-                <WordTable title="The staples" rows={staples} motifWord={signature?.staple?.word} />
+                <WordTable title="The staples" rows={staples} motifWord={signature?.staple?.word} unit="times" />
                 <p className="mt-3 text-[0.78rem] italic text-ink-mute">
                   Grammar and ad-libs set aside. The rule beneath each word is its share of the most-used
                   {signature?.staple

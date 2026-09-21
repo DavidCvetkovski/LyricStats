@@ -39,17 +39,23 @@ What gets stored, under stats_json["signature"]:
              "title": "Compton", "times": 4},
    "words": [["compton", 76, 136], ["hood", 77, 152], ...],   # runner-ups, same order
    "staple": {"word": "nigga", "songs": 250, "uses": 1240, "share": 0.644},
+   "staples": [["nigga", 250, 1240], ["bitch", 198, 702], ...],  # up to 25
    "curated": false}
 
 "word" is the signature: recurring across the catalogue and rare among artists
 singing in the same language. "staple" is simply the word they say most, once
-grammar and ad-libs are set aside. Rarity is judged per language (a small
+grammar and ad-libs are set aside, and "staples" the list it heads: the words
+said most, each in more than one song, for the artist page's table. A quote's
+title is the song's own, without "(Extended Mix)" or " - Live"; a mash-up, or a
+remix the artist is credited for, never supplies the quote, because the words
+in it are somebody else's. Rarity is judged per language (a small
 function-word list tells the language from an artist's most frequent words),
 otherwise every Bosnian pronoun would look rare next to the English majority.
 
 and three more keys in stats_json["percentiles"]: question_share,
 avg_repetition_ratio, avg_word_length, measured over the whole local table like
-the six the importer already stores.
+the six the importer already stores. A row that lacks those six (one written by
+another pipeline, like a hand-curated catalogue) gets them from the same table.
 """
 
 from __future__ import annotations
@@ -82,6 +88,11 @@ MIN_SONGS = 25
 MIN_USES_FOR_DF = 5      # a word counts for an artist's document frequency from this many uses
 MIN_IDF = 1.0            # words most same-language artists use are not a signature of anyone
 EXTRA_PCTL = ("question_share", "avg_repetition_ratio", "avg_word_length")
+# The importer's six (scripts/import_lrclib.py PCTL_KEYS); filled only where missing.
+BASE_PCTL = ("total_unique_words", "avg_ttr", "avg_wpm", "avg_hook_share",
+             "avg_rhyme", "avg_words_per_song")
+STAPLES = 25
+PATCH_BATCH = 5000
 
 TOKEN_RE = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*")
 # Ad-libs and onomatopoeia that belong to everyone: syllables that get sung, not said.
@@ -155,7 +166,33 @@ LANG_WORDS: dict[str, set[str]] = {
               "akan jangan bisa semua".split()),
     "ro": set("și nu că de te mă cu în pe un o eu tu mai ce la e sa ca dar".split()),
 }
-ANY_FUNCTION_WORD: set[str] = set().union(*LANG_WORDS.values())
+# More grammar, set aside from signatures and staples but left out of the
+# lists above so that telling an artist's language (and the rarity table
+# built from it) stays as it was. web/lib/filler.ts carries the same words.
+MORE_GRAMMAR: dict[str, set[str]] = {
+    "en": set("gon bout 'bout tryna finna imma ima cuz 'em".split()),
+    "bs": set("mene tebe zbog nje nju njoj njemu njega njih svaki svaka svako svakog malo "
+              "mnom tobom".split()),
+    "es": set("qué porque cuando donde dónde cómo quién eso esto esta este ese esa ella ellos "
+              "ellas él nosotros usted hasta hay aquí ahí allí así ahora siempre nunca también "
+              "muy mucho poco otra otro otros otras cada algo alguien nadie mismo misma entre "
+              "desde sobre hacia contra les nos sus tus mis mío mía tuyo tuya conmigo contigo "
+              "ser estar fue estás están voy vas vamos van hace hacer quiero quieres quiere "
+              "tengo tienes tiene sabes puedo puedes puede ere vamo ver dice digo hago".split()),
+    "pt": set("porque quando onde como quem isso isto essa esse esta este aqui agora sempre "
+              "nunca também muito pouco outra outro cada algo alguém ninguém mesmo entre desde "
+              "sobre nos seu sua seus suas teu tua comigo contigo sou ser estar foi são somos "
+              "estão tô vai vamos vão faz fazer quero quer sei sabe tem tenho ter vem".split()),
+    "de": set("aus von mehr hab habe hast hatte hätte kommt komm kommen gehen geht geh ganz gar "
+              "sehr viel viele wieder nun jetzt heute bis als dies diese dieser dieses ihre "
+              "unser unsere sag sagen sagt weiß weißt gibt lass lassen machen macht mach "
+              "willst kannst können könnte musst müssen würde wär wäre sei selbst hin weg "
+              "zurück nein".split()),
+    "it": set("cosa perché ancora sempre niente tutto tutti questo questa quello quella anche "
+              "dopo prima voglio vuoi vuole sai posso puoi può hai siamo siete stato stata mio "
+              "mia tuo tua suo sua nostro loro lei lui noi voi cui ogni poi qui qua".split()),
+}
+ANY_FUNCTION_WORD: set[str] = set().union(*LANG_WORDS.values(), *MORE_GRAMMAR.values())
 SCRIPTS = (
     ("cjk", re.compile(r"[぀-ヿ㐀-鿿가-힯]")),
     ("ar", re.compile(r"[؀-ۿ]")),
@@ -342,20 +379,56 @@ def fetch_rows(song: sqlite3.Connection, name: str, gkey: str) -> SongRows:
 
 
 JUNK_QUOTE_TITLE = re.compile(r"\b(vs\.?|remix|mix|mashup|megamix|medley|karaoke|live|edit|version)\b", re.I)
+MASH_UP = re.compile(r"\b(vs\.?|mashup|megamix|medley)\b", re.I)
+VERSION_WORDS = re.compile(
+    r"\b(remix(?:ed)?|mix|version|edit|live|session|remaster(?:ed)?|demo|acoustic|extended|"
+    r"radio|karaoke|instrumental|unplugged|sped up|slowed|rework|dub|bootleg|vip)\b", re.I)
+VERSION_TAIL = re.compile(
+    r"^live\b|\b(remix(?:ed)?|mix|version|edit|session|remaster(?:ed)?|demo|acoustic|rework|"
+    r"dub|bootleg)$", re.I)
 
 
-def hook_quote(lines: list[tuple[int, str, str]]) -> dict | None:
-    """The best hook line among those that carry the word."""
+def version_clauses(title: str) -> list[str]:
+    """The parts of a title that name a version: "(Extended Mix)", " - Live"."""
+    out = [m.group(0) for m in re.finditer(r"[(\[][^)\]]*[)\]]", title) if VERSION_WORDS.search(m.group(0))]
+    parts = title.split(" - ")
+    if len(parts) > 1 and VERSION_TAIL.search(parts[-1].strip()):
+        out.append(parts[-1])
+    return out
+
+
+def display_title(title: str) -> str:
+    """The song's own title, without the version it was taken from."""
+    t = title
+    for clause in version_clauses(title):
+        t = t.replace(" - " + clause, "") if not clause.startswith(("(", "[")) else t.replace(clause, "")
+    t = re.sub(r"\s{2,}", " ", t).strip(" -")
+    return t or title
+
+
+def hook_quote(lines: list[tuple[int, str, str]], own: set[str] = frozenset()) -> dict | None:
+    """The best hook line among those that carry the word.
+
+    A mash-up, or a remix credited to the artist (`own` holds their name's
+    words), is skipped: the words in it belong to whoever sang the original.
+    Live takes and other versions count, below any studio recording, and the
+    quote names the song rather than the version.
+    """
     best, best_score = None, -math.inf
     for times, line, title in lines:
         n = len(line.split())
         if n < 3 or n > 16 or line.startswith("[") or line.isupper():
             continue
+        if MASH_UP.search(title):
+            continue
+        clauses = version_clauses(title)
+        if own and any(own & set(TOKEN_RE.findall(c.lower())) for c in clauses):
+            continue
         score = times + (4 if 5 <= n <= 12 else 0) + min(n, 8) / 10
         if JUNK_QUOTE_TITLE.search(title):
-            score -= 1000  # a mash-up or live take only when nothing else carries the word
+            score -= 1000  # a live take or a remix only when nothing else carries the word
         if score > best_score:
-            best, best_score = {"line": line, "title": title, "times": times}, score
+            best, best_score = {"line": line, "title": display_title(title), "times": times}, score
     return best
 
 
@@ -379,6 +452,7 @@ def signature(display: str, rows: SongRows, idx: list[int], df: DF,
 
     lang = classify([w for w, _c in uses.most_common(30)])
     forbidden = name_tokens(display)
+    own = {w for w in forbidden if len(w) >= 3 and not VERSION_WORDS.fullmatch(w)}
     floor = max(3, math.ceil(0.06 * n))
 
     def usable(w: str) -> bool:
@@ -392,6 +466,10 @@ def signature(display: str, rows: SongRows, idx: list[int], df: DF,
         if spread[w] >= max(3, math.ceil(0.1 * n)) and usable(w):
             staple = {"word": w, "songs": spread[w], "uses": u, "share": round(spread[w] / n, 3)}
             break
+    # The table under it: the words said most, each in more than one song so
+    # that one chant does not make a staple.
+    staples = [[w, spread[w], u] for w, u in uses.most_common(800)
+               if spread[w] >= max(2, math.ceil(0.03 * n)) and usable(w)][:STAPLES]
 
     # The signature: recurrence across the catalogue, weighted by how much
     # rarer the word is among artists of the same language, with a nudge for
@@ -410,7 +488,7 @@ def signature(display: str, rows: SongRows, idx: list[int], df: DF,
               f"staple {staple['word'] if staple else '-'} "
               f"({staple['songs']} songs, {staple['uses']} uses)" if staple else "")
         for score, w in cands[:show]:
-            q = hook_quote(lines.get(w, []))
+            q = hook_quote(lines.get(w, []), own)
             print(f"   {w:16s} {score:6.2f}  in {spread[w]:4d} songs  {uses[w]:5d} uses  "
                   f"share {df.share(lang, w):5.1%} idf {df.idf(lang, w):4.2f}  "
                   f"{q['line'][:58] + ' — ' + q['title'][:24] if q else ''}")
@@ -419,7 +497,7 @@ def signature(display: str, rows: SongRows, idx: list[int], df: DF,
 
     words = [[w, spread[w], uses[w]] for _s, w in cands[:12]]
     word = cands[0][1] if cands else staple["word"]
-    quote = hook_quote(lines.get(word, []))
+    quote = hook_quote(lines.get(word, []), own)
     is_curated = False
     if curated and curated.get("word") and spread.get(curated["word"], 0) >= 1:
         cw = curated["word"]
@@ -437,7 +515,7 @@ def signature(display: str, rows: SongRows, idx: list[int], df: DF,
         ):
             quote = {"line": cq["quote"], "title": cq["song_title"], "times": 0}
         else:
-            quote = hook_quote(lines.get(cw, []))
+            quote = hook_quote(lines.get(cw, []), own)
     return {
         "lang": lang,
         "word": word,
@@ -447,6 +525,7 @@ def signature(display: str, rows: SongRows, idx: list[int], df: DF,
         "quote": quote,
         "words": words,
         "staple": staple,
+        "staples": staples,
         "curated": is_curated,
     }
 
@@ -474,7 +553,7 @@ def load_reviews() -> dict[str, dict]:
 
 def extra_percentiles(app: sqlite3.Connection) -> dict[str, list[float]]:
     dists: dict[str, list[float]] = {}
-    for key in EXTRA_PCTL:
+    for key in EXTRA_PCTL + BASE_PCTL:
         vals = [r[0] for r in app.execute(
             f"SELECT json_extract(stats_json, '$.{key}') FROM artistaggregate") if r[0] is not None]
         dists[key] = sorted(vals)
@@ -520,26 +599,41 @@ def prod_titles() -> dict[str, list[tuple[str, int | None]]]:
 
 
 def prod_apply(path: Path) -> None:
+    """Merge the patches in batches, vacuuming between them.
+
+    Every update writes a new copy of the row; vacuuming after each batch
+    lets the next one reuse the space instead of growing the table by a
+    whole copy of itself, which the database's storage cap would not allow.
+    """
     import psycopg
 
     plan = json.loads(path.read_text())
-    patches = plan["patches"]
-    print(f"Applying {len(patches):,} patches from {path} …")
-    with psycopg.connect(prod_url(), connect_timeout=15) as conn:
+    patches = list(plan["patches"].items())
+    print(f"Applying {len(patches):,} patches from {path} …", flush=True)
+    total = 0
+    with psycopg.connect(prod_url(), connect_timeout=15, autocommit=True) as conn:
         conn.execute("CREATE TEMP TABLE sig_patch (name text PRIMARY KEY, patch text NOT NULL)")
-        with conn.cursor().copy("COPY sig_patch (name, patch) FROM STDIN") as cp:
-            for name, patch in patches.items():
-                text = json.dumps(patch, ensure_ascii=False).replace("\\u0000", "").replace("\x00", "")
-                cp.write_row((name, text))
-        # A few stored rows carry NUL escapes from broken submissions, which
-        # jsonb refuses; they are dropped from the text before the merge.
-        cur = conn.execute(
-            "UPDATE artistaggregate a SET stats_json = "
-            "(replace(a.stats_json, '\\u0000', '')::jsonb || p.patch::jsonb)::text "
-            "FROM sig_patch p WHERE a.name = p.name"
-        )
-        print(f"  rows updated: {cur.rowcount:,}")
-        conn.commit()
+        for start in range(0, len(patches), PATCH_BATCH):
+            batch = patches[start:start + PATCH_BATCH]
+            with conn.transaction():
+                conn.execute("TRUNCATE sig_patch")
+                with conn.cursor().copy("COPY sig_patch (name, patch) FROM STDIN") as cp:
+                    for name, patch in batch:
+                        text = json.dumps(patch, ensure_ascii=False)
+                        cp.write_row((name, text.replace("\\u0000", "").replace("\x00", "")))
+                # A few stored rows carry NUL escapes from broken submissions,
+                # which jsonb refuses; they are dropped before the merge.
+                cur = conn.execute(
+                    "UPDATE artistaggregate a SET stats_json = "
+                    "(replace(a.stats_json, '\\u0000', '')::jsonb || p.patch::jsonb)::text "
+                    "FROM sig_patch p WHERE a.name = p.name"
+                )
+                total += cur.rowcount
+            conn.execute("VACUUM artistaggregate")
+            size = conn.execute(
+                "SELECT pg_size_pretty(pg_database_size(current_database()))").fetchone()[0]
+            print(f"  {min(start + PATCH_BATCH, len(patches)):,}/{len(patches):,} merged, "
+                  f"{total:,} rows updated, database {size}", flush=True)
     print("done")
 
 
@@ -599,6 +693,9 @@ def main() -> None:
         pct = dict(stats.get("percentiles") or {})
         for key in EXTRA_PCTL:
             pct[key] = pctl(dists, key, stats.get(key))
+        for key in BASE_PCTL:
+            if pct.get(key) is None:
+                pct[key] = pctl(dists, key, stats.get(key))
 
         sig = signature(display, srows, srows.pick(titles), df, curated=curated, show=args.show)
         if sig:
