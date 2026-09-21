@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections import Counter
+from difflib import SequenceMatcher
 
 from .text import SECTION_RE, TOKEN_RE
 
@@ -27,6 +28,78 @@ MIN_DURATION_FOR_WPM = 30  # seconds
 
 def _norm_line(ln: str) -> str:
     return " ".join(ln.lower().split())
+
+
+def _match_key(ln: str) -> str:
+    """Letters and digits only: the same line in two transcriptions still matches."""
+    return re.sub(r"[\W_]+", "", ln.lower())
+
+
+def _lrc_events(synced: str) -> list[tuple[float, str]]:
+    """(seconds, text) for every stamped line; a line with several stamps yields several."""
+    events: list[tuple[float, str]] = []
+    for raw in synced.split("\n"):
+        line = raw.strip()
+        stamps: list[float] = []
+        pos = 0
+        while True:
+            m = LRC_TS_RE.match(line, pos)
+            if not m:
+                break
+            frac = (m.group(3) or "0").ljust(3, "0")[:3]
+            stamps.append(int(m.group(1)) * 60 + int(m.group(2)) + int(frac) / 1000)
+            pos = m.end()
+        text = line[pos:].strip()
+        if stamps and text:
+            events.extend((ts, text) for ts in stamps)
+    events.sort(key=lambda e: e[0])
+    return events
+
+
+def line_times(synced: str, lines: list[str]) -> list[float | None] | None:
+    """When each counted line is sung, from the LRC text.
+
+    LRCLIB's plain and synced texts usually run line for line; a Genius text
+    set against LRCLIB timing does not, so lines are matched by their letters,
+    in order, within a short window. None unless most lines found a stamp.
+    """
+    events = [(ts, _match_key(text)) for ts, text in _lrc_events(synced)]
+    if not events or not lines:
+        return None
+    out: list[float | None] = []
+    j = 0
+    matched = 0
+    for ln in lines:
+        key = _match_key(ln)
+        hit = None
+        step = 1
+        window = range(j, min(j + 8, len(events)))
+        # The same line; then a line the timed text splits in two; then a
+        # line spelt a little differently ("lurkin'" for "lurking").
+        for i in window:
+            if events[i][1] == key:
+                hit = i
+                break
+        if hit is None:
+            for i in window:
+                if i + 1 < len(events) and events[i][1] + events[i + 1][1] == key:
+                    hit, step = i, 2
+                    break
+        if hit is None and len(key) >= 8:
+            for i in window:
+                other = events[i][1]
+                if abs(len(other) - len(key)) <= 8 and SequenceMatcher(None, other, key).ratio() >= 0.8:
+                    hit = i
+                    break
+        if hit is None:
+            out.append(None)
+        else:
+            out.append(round(events[hit][0], 1))
+            j = hit + step
+            matched += 1
+    if matched < 0.6 * len(lines):
+        return None
+    return out
 
 
 def _line_ending(ln: str) -> str:
@@ -106,8 +179,10 @@ def song_stats(
     # title drops: the normalised title phrase appearing in the lyrics
     t_norm = _norm_line(re.sub(r"[\(\[].*?[\)\]]", "", title))
     drops = 0
+    drop_at: list[int] = []
     if 3 <= len(t_norm) <= 60 and len(t_norm.split()) <= 6:
         drops = _norm_line(plain).count(t_norm)
+        drop_at = [i for i, ln in enumerate(norm) if t_norm in ln]
 
     q = sum(1 for ln in lines if ln.rstrip().endswith("?"))
     excl = sum(1 for ln in lines if ln.rstrip().endswith("!"))
@@ -152,6 +227,8 @@ def song_stats(
         "line_words": [len(TOKEN_RE.findall(ln)) for ln in lines],
         "top_line_at": [i for i, ln in enumerate(norm) if ln == top_line] if top_line_n >= 3 else [],
         "once": sum(1 for c in cnt.values() if c == 1),
+        "drop_at": drop_at,
+        "line_at": line_times(synced, lines) if synced else None,
     }
 
 
@@ -161,7 +238,7 @@ PUBLIC_KEYS = (
     "wc", "uniq", "ttr", "rep", "hook", "top_line", "top_line_n", "drops",
     "q", "excl", "one_word", "rhyme", "longest_word", "awl", "wpm", "first",
     "gap", "gap_at", "fast15", "curve", "last", "line_count", "line_words",
-    "top_line_at", "once",
+    "top_line_at", "once", "drop_at", "line_at",
 )
 
 

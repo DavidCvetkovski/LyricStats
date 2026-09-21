@@ -249,10 +249,17 @@ def _song_payload(
     else:
         st = stats.compute(song.lyrics).to_dict()
         db.save_stats(song, st)
-    if "reading" not in st:
-        # A cache entry from before the reading existed: read the text now
-        # (no clock; the synced lines were never kept) and remember it.
-        st = {**st, "reading": reading(song.title, song.lyrics)}
+    stored = st.get("reading")
+    if stored is None or "drop_at" not in stored:
+        # A cache entry from before the reading, or before its marks, existed:
+        # read the text again now. The clock keys are kept from the stored
+        # reading, because the synced lines they came from were never kept.
+        fresh = reading(song.title, song.lyrics)
+        if fresh and stored:
+            for key in ("wpm", "first", "gap", "gap_at", "fast15", "curve", "last", "duration"):
+                if stored.get(key) is not None:
+                    fresh[key] = stored[key]
+        st = {**st, "reading": fresh}
         db.save_stats(song, st)
     return _assemble(
         artist, song.title, song.album, song.year, source, song.lyrics, st, st["reading"], agg, row

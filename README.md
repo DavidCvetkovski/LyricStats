@@ -55,6 +55,39 @@ names or slugs and answers with the text, its **reading** and where the song sta
 
 Old `/song?artist=…&title=…` links redirect to the slug address.
 
+The page opens on the text itself: one lead figure, and the words folded to their first lines
+until asked for. Opened, the sheet carries the reading's marks — the returning line underlined
+and counted, the title highlighted where it is sung, the minute each line lands (when the
+provider had a timed text; `reading.line_at`) and the silences between lines drawn as rules.
+`/song/<artist>/<title>#text` opens it straight away; the search page's "Just the words"
+button goes there.
+
+## The signature
+
+The artist page's signature — the word that is theirs — comes from `scripts/build_signatures.py`,
+which reads the big local tables (`data/lrclib/_artist_tok.db`, `_song_stat.db`):
+
+- a word has to recur across the catalogue (song spread, not raw count, so a word shouted a
+  hundred times in one song does not qualify), and
+- be rarer among artists singing in the same language (a small function-word list tells the
+  language from an artist's most frequent words; rarity is judged within that language),
+- with a hook line that carries it, when one of the artist's songs has one.
+
+It also stores the *staple* (the word they say most, grammar and ad-libs set aside), the
+runner-ups, and three more corpus percentiles (`question_share`, `avg_repetition_ratio`,
+`avg_word_length`). Hand-curated motifs in `data/reviews/*.json` win over the score.
+
+```bash
+uv run python scripts/build_signatures.py --df       # document frequency per language, ~1 min
+uv run python scripts/build_signatures.py --only "Kendrick Lamar" --show 8   # look before writing
+uv run python scripts/build_signatures.py --write    # every artist with ≥ 25 songs, ~45 min
+uv run python scripts/build_signatures.py --prod-plan output/signatures-prod.json   # read-only
+uv run python scripts/build_signatures.py --prod-apply output/signatures-prod.json  # one UPDATE
+```
+
+The production plan is computed against production's own song lists, because some catalogues
+were curated by hand up there, and it is applied as one server-side merge into `stats_json`.
+
 ## Tests
 
 ```bash

@@ -8,7 +8,7 @@ import { ArchiveRulers, RULERS, phrase } from "./ArchiveRulers";
 import { CatalogueStrips, standing } from "./CatalogueStrips";
 import { Clock } from "./Clock";
 import { HookStrip } from "./HookStrip";
-import { Lyrics } from "./Lyrics";
+import { TextSheet } from "./TextSheet";
 import { verdict } from "./verdict";
 
 const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII"];
@@ -50,14 +50,15 @@ export function SongReading({ song }: { song: SongPayload }) {
   const beats: { id: string; label: string }[] = [];
   if (full) beats.push({ id: "hook", label: hook ? "The hook" : "The lines" });
   if (clock) beats.push({ id: "clock", label: "The clock" });
-  if (full) beats.push({ id: "words", label: "The words" });
+  if (full) beats.push({ id: "words", label: "The vocabulary" });
   if (song.catalogue) beats.push({ id: "catalogue", label: "In the catalogue" });
   if (archive) beats.push({ id: "archive", label: "Among the archive" });
-  if (full) beats.push({ id: "text", label: "The text" });
   const numeral = (id: string) => ROMAN[beats.findIndex((b) => b.id === id)] ?? "";
+  const lastId = beats[beats.length - 1]?.id;
 
   const artistHref = `/artist?${new URLSearchParams({ name: song.artist, min: "500" }).toString()}`;
   const deck = verdict(song);
+  const first = full ? lead(song) : null;
 
   return (
     <article className="mx-auto max-w-6xl px-4 sm:px-6 pt-8 sm:pt-10 pb-16 sm:pb-20">
@@ -104,8 +105,13 @@ export function SongReading({ song }: { song: SongPayload }) {
             {deck}
           </p>
         )}
-        {beats.length > 1 && (
+        {(full || beats.length > 1) && (
           <nav aria-label="In this reading" className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2">
+            {full && (
+              <a href="#text" className="smallcaps text-ink hover:text-accent transition-colors">
+                The text
+              </a>
+            )}
             {beats.map((b, i) => (
               <a key={b.id} href={`#${b.id}`} className="smallcaps text-ink hover:text-accent transition-colors">
                 {ROMAN[i]}. {b.label}
@@ -118,7 +124,40 @@ export function SongReading({ song }: { song: SongPayload }) {
       {!full && <NoText song={song} />}
 
       {full && (
-        <Beat id="hook" numeral={numeral("hook")} label={hook ? "The hook" : "The lines"}>
+        <section id="text" className="scroll-mt-8 border-b border-rule-strong py-12 sm:py-16">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16 items-start">
+            <Reveal>
+              {first && (
+                <div>
+                  <p className="smallcaps mb-4">The lead</p>
+                  <p className="figure text-ink break-words" style={{ fontSize: "clamp(4.5rem, 12vw, 8rem)" }}>
+                    {first.figure}
+                  </p>
+                  <p className="mt-2 font-serif italic text-2xl text-ink-soft leading-snug">{first.unit}</p>
+                  {first.note && (
+                    <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-mute">
+                      {first.note.charAt(0).toUpperCase() + first.note.slice(1)} we have read.
+                    </p>
+                  )}
+                  {first.line && (
+                    <blockquote translate="no" className="mt-5 max-w-sm font-serif italic text-lg text-ink-soft leading-snug">
+                      “{first.line}”
+                    </blockquote>
+                  )}
+                </div>
+              )}
+            </Reveal>
+            <TextSheet song={song} />
+          </div>
+          <p className="mt-8 text-[0.78rem] italic text-ink-mute">
+            Read from {SOURCE_NAMES[song.source] ?? "the stored"} text. Another transcription would change the
+            count a little; the shape would hold.
+          </p>
+        </section>
+      )}
+
+      {full && (
+        <Beat id="hook" numeral={numeral("hook")} label={hook ? "The hook" : "The lines"} last={lastId === "hook"}>
           <div className="grid gap-10 lg:grid-cols-[1fr_1.25fr] lg:gap-16 items-start">
             <div>
               {hook ? (
@@ -180,7 +219,7 @@ export function SongReading({ song }: { song: SongPayload }) {
       )}
 
       {clock && (
-        <Beat id="clock" numeral={numeral("clock")} label="The clock">
+        <Beat id="clock" numeral={numeral("clock")} label="The clock" last={lastId === "clock"}>
           <div className="grid gap-10 lg:grid-cols-[1fr_1.4fr] lg:gap-16 items-center">
             <div>
               <h2 className="font-serif italic text-3xl sm:text-4xl leading-snug">{clockHeadline(song)}</h2>
@@ -201,7 +240,7 @@ export function SongReading({ song }: { song: SongPayload }) {
       )}
 
       {full && (
-        <Beat id="words" numeral={numeral("words")} label="The words">
+        <Beat id="words" numeral={numeral("words")} label="The vocabulary" last={lastId === "words"}>
           <div className="grid gap-10 lg:grid-cols-[1.1fr_1fr] lg:gap-16">
             <div>
               <WordTable title="Most-used words" rows={song.stats.top_words_no_stop} />
@@ -235,7 +274,7 @@ export function SongReading({ song }: { song: SongPayload }) {
       )}
 
       {song.catalogue && (
-        <Beat id="catalogue" numeral={numeral("catalogue")} label="In the catalogue">
+        <Beat id="catalogue" numeral={numeral("catalogue")} label="In the catalogue" last={lastId === "catalogue"}>
           <div className="grid gap-10 lg:grid-cols-[1fr_1.5fr] lg:gap-16 items-start">
             <div>
               <h2 className="font-serif italic text-3xl sm:text-4xl leading-snug">
@@ -256,7 +295,7 @@ export function SongReading({ song }: { song: SongPayload }) {
       )}
 
       {archive && (
-        <Beat id="archive" numeral={numeral("archive")} label="Among the archive">
+        <Beat id="archive" numeral={numeral("archive")} label="Among the archive" last={lastId === "archive"}>
           <h2 className="font-serif italic text-3xl sm:text-4xl leading-snug max-w-3xl">
             {archiveHeadline(song)}
           </h2>
@@ -267,18 +306,48 @@ export function SongReading({ song }: { song: SongPayload }) {
           <ArchiveRulers song={song} />
         </Beat>
       )}
-
-      {full && (
-        <Beat id="text" numeral={numeral("text")} label="The text" last>
-          <Lyrics lyrics={song.lyrics} hookAt={hook ? (r.top_line_at ?? []) : []} lines={r.line_count ?? 0} />
-          <p className="mt-8 text-[0.78rem] italic text-ink-mute">
-            Read from {SOURCE_NAMES[song.source] ?? "the stored"} text. Another transcription would change
-            the count a little; the shape would hold.
-          </p>
-        </Beat>
-      )}
     </article>
   );
+}
+
+type Lead = { figure: string; unit: string; note?: string; line?: string; score: number };
+
+/**
+ * The one figure to open with: whatever the archive finds most unusual about
+ * this song, or, without the archive, the line that comes back.
+ */
+function lead(song: SongPayload): Lead | null {
+  const r = song.reading;
+  if (!r) return null;
+  const p = song.percentiles;
+  const far = (key: keyof typeof p) => (p[key] != null ? Math.abs(p[key]! - 50) : -1);
+  const note = (row: number, key: keyof typeof p) => (p[key] != null ? phrase(RULERS[row], p[key]!) : undefined);
+  const c: Lead[] = [];
+  if (r.top_line && (r.top_line_n ?? 0) >= 3) {
+    c.push({
+      figure: `×${r.top_line_n}`,
+      unit: "one line comes back",
+      note: note(3, "hook"),
+      line: r.top_line,
+      score: Math.max(far("hook"), 12),
+    });
+  }
+  if (r.first != null) c.push({ figure: mmss(r.first), unit: "before the first word", note: note(5, "first"), score: far("first") });
+  if (r.wpm != null) c.push({ figure: String(Math.round(r.wpm)), unit: "words a minute", note: note(4, "wpm"), score: far("wpm") });
+  if (r.drops != null && r.drops > 0) {
+    c.push({
+      figure: String(r.drops),
+      unit: r.drops === 1 ? "time it sings its own title" : "times it sings its own title",
+      note: note(7, "drops"),
+      score: far("drops"),
+    });
+  }
+  if (r.gap != null && r.gap >= 15) c.push({ figure: `${Math.round(r.gap)} s`, unit: "of silence, at its longest", note: note(6, "gap"), score: far("gap") });
+  c.push({ figure: r.wc.toLocaleString(), unit: "words", note: note(0, "wc"), score: far("wc") });
+  c.push({ figure: pct(r.ttr), unit: "of its words are distinct", note: note(1, "ttr"), score: far("ttr") });
+  c.push({ figure: pct(r.rep), unit: "of its lines repeat one already sung", note: note(2, "rep"), score: far("rep") });
+  c.sort((a, b) => b.score - a.score);
+  return c[0] ?? null;
 }
 
 function Beat({

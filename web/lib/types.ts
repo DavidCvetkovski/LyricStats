@@ -55,6 +55,10 @@ export type Reading = {
   line_words?: number[];
   once?: number;
   duration?: number | null;
+  /** Counted lines that carry the title. */
+  drop_at?: number[];
+  /** When each counted line is sung, from the timed text; null without one. */
+  line_at?: (number | null)[] | null;
 };
 
 /** One metric of the song against the artist's whole catalogue. */
@@ -108,6 +112,22 @@ export type SongMeta = {
   has_sections: boolean;
 };
 
+/** The word that is an artist's, from scripts/build_signatures.py. */
+export type Signature = {
+  lang: string;
+  word: string;
+  songs: number;
+  uses: number;
+  share: number;
+  /** A hook line that carries the word, and how often that song sings it. */
+  quote: { line: string; title: string; times: number } | null;
+  /** [word, songs, uses], the signature first, then the runner-ups. */
+  words: [string, number, number][];
+  /** The word they say most, grammar and ad-libs set aside. */
+  staple: { word: string; songs: number; uses: number; share: number } | null;
+  curated: boolean;
+};
+
 export type ArtistStats = {
   song_count: number;
   total_words: number;
@@ -147,6 +167,7 @@ export type ArtistStats = {
   percentiles?: Record<string, number | null> | null;
   lang_mix?: Record<string, number>;
   motif_quote?: { word: string; quote: string; song_title: string } | null;
+  signature?: Signature | null;
 };
 
 export type ArtistPayload = {

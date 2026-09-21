@@ -50,14 +50,14 @@ export function WordTable({
               </span>
               <span className="relative">
                 <span
-                  className={`font-serif text-xl ${word === motifWord ? "text-[#B4995F] italic font-medium" : "text-ink"}`}
+                  className={`font-serif text-xl ${word === motifWord ? "text-accent italic font-medium" : "text-ink"}`}
                   style={{ fontFamily: "var(--font-serif), Georgia, serif" }}
                 >
                   {word}
                 </span>
                 <span
                   aria-hidden
-                  className={`block absolute -bottom-0.5 left-0 h-px ${word === motifWord ? "bg-[#B4995F]" : "bg-accent"}`}
+                  className={`block absolute -bottom-0.5 left-0 h-px ${word === motifWord ? "bg-accent" : "bg-accent"}`}
                   style={{ width: `${(n / top) * 100}%`, opacity: 0.3 }}
                 />
               </span>

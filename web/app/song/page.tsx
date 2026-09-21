@@ -65,13 +65,17 @@ function SongSearch() {
       });
   }
 
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function go(hash = "") {
     const a = artist.trim();
     const t = title.trim();
     if (!a || !t) return;
     saveLastSong({ artist: a, title: t });
-    router.push(songPath(a, t));
+    router.push(songPath(a, t) + hash);
+  }
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    go();
   }
 
   return (
@@ -82,8 +86,8 @@ function SongSearch() {
           One song, read closely.
         </h2>
         <p className="mt-3 font-serif italic text-lg sm:text-xl text-ink-soft max-w-2xl">
-          Name the artist and the song. We count the words, time the lines, and set what
-          we find in&nbsp;type.
+          Name the artist and the song. We set the words in type, count them, time the lines,
+          and mark what comes back.
         </p>
       </header>
 
@@ -117,9 +121,17 @@ function SongSearch() {
             ))}
           </datalist>
         </label>
-        <div className="sm:col-span-2">
+        <div className="sm:col-span-2 flex flex-wrap items-center gap-x-4 gap-y-3">
           <button type="submit" className="pill" disabled={!artist.trim() || !title.trim()}>
             Read it →
+          </button>
+          <button
+            type="button"
+            className="pill pill-ghost"
+            disabled={!artist.trim() || !title.trim()}
+            onClick={() => go("#text")}
+          >
+            Just the words
           </button>
         </div>
       </form>

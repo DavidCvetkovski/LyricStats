@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { titleCase } from "@/lib/utils";
-import type { ArtistStats } from "@/lib/types";
+import type { ArtistStats, Signature } from "@/lib/types";
 import { recurringWord } from "@/lib/artistEvidence";
+import { songPath } from "@/lib/slug";
 import { Count, Reveal } from "./EditorialMotion";
 
 // ── Stat registry ────────────────────────────────────────────────────────────
@@ -92,6 +94,7 @@ const STAT_REGISTRY: StatDef[] = [
   },
   {
     key: "avg_repetition_ratio",
+    percentileKey: "avg_repetition_ratio",
     getValue: (s) => s.avg_repetition_ratio,
     format: (v) => `${(v * 100).toFixed(0)}%`,
     unit: "line repetition",
@@ -104,6 +107,7 @@ const STAT_REGISTRY: StatDef[] = [
   },
   {
     key: "question_share",
+    percentileKey: "question_share",
     getValue: (s) => s.question_share,
     format: (v) => `${(v * 100).toFixed(1)}%`,
     unit: "questions asked",
@@ -116,9 +120,10 @@ const STAT_REGISTRY: StatDef[] = [
   },
   {
     key: "avg_word_length",
+    percentileKey: "avg_word_length",
     getValue: (s) => s.avg_word_length,
     format: (v) => v.toFixed(1),
-    unit: "chars per word",
+    unit: "letters per word",
     label: "The Weight",
     highCopy: (n, p) => `${n} uses heavier, **longer words** than ${p}% of all artists — polysyllabic and deliberate.`,
     lowCopy: (n, p) => `${n} favours short, **punchy** words — more compact than ${100 - p}% of artists.`,
@@ -195,42 +200,57 @@ function HighlightedText({ text, isHero = false }: { text: string; isHero?: bool
   );
 }
 
-// ── Vocal Signature Box ──────────────────────────────────────────────────────
+// ── The signature box ────────────────────────────────────────────────────────
+// The word that is theirs: recurring across the catalogue and rarer among
+// artists singing in the same language (scripts/build_signatures.py). Without
+// a computed signature the box falls back to a plain frequency label.
 
-function VocalSignatureBox({ 
-  word, 
-  count, 
+export function SignatureBox({
+  signature,
+  fallback,
+  artistName,
   songCount,
-  quote
-}: { 
-  word: string; 
-  count: number; 
+}: {
+  signature?: Signature | null;
+  fallback: [string, number] | null;
+  artistName: string;
   songCount: number;
-  quote?: { quote: string; song_title: string } | null;
 }) {
+  if (!signature && !fallback) return null;
+  const word = signature?.word ?? fallback![0];
   return (
-    <div className="border border-rule-strong p-6 bg-paper-soft text-center w-full max-w-[280px] md:max-w-xs relative paper-grain shadow-sm transition-all duration-700">
+    <div className="border border-rule-strong p-6 bg-paper-soft text-center w-full max-w-[280px] md:max-w-xs relative paper-grain shadow-sm">
       <div className="absolute inset-1 border border-dashed border-rule-strong/60 pointer-events-none" />
-      <span className="smallcaps text-accent block mb-2">Vocal Signature</span>
-      <div className="font-serif italic text-4xl text-ink font-bold my-4 leading-none break-words">
+      <span className="smallcaps text-accent block mb-2">{signature ? "The signature" : "A recurring word"}</span>
+      <div translate="no" className="notranslate font-serif italic text-4xl text-ink font-bold my-4 leading-none break-words">
         &ldquo;{word}&rdquo;
       </div>
-      
-      {quote ? (
-        <div className="mt-6 mb-2 text-left border-l-2 border-accent/40 pl-4">
-          <p className="font-serif italic text-sm text-ink leading-relaxed mb-2">
-            &ldquo;{quote.quote}&rdquo;
-          </p>
-          <span className="text-[0.65rem] uppercase tracking-wider text-ink-soft font-sans font-semibold block">
-            — {quote.song_title}
-          </span>
-        </div>
-      ) : (
-        <p className="font-serif text-sm text-ink-soft leading-normal mb-2">
-          Repeated <strong className="font-sans font-bold text-ink">{count.toLocaleString()}</strong> times
+      {signature ? (
+        <p className="font-serif text-sm text-ink-soft leading-normal">
+          in <strong className="font-sans font-bold text-ink">{signature.songs}</strong> of{" "}
+          <strong className="font-sans font-bold text-ink">{songCount}</strong> songs
           <br />
-          across <strong className="font-sans font-bold text-ink">{songCount}</strong> songs
+          <strong className="font-sans font-bold text-ink">{signature.uses.toLocaleString()}</strong> times in all
         </p>
+      ) : (
+        <p className="font-serif text-sm text-ink-soft leading-normal">
+          <strong className="font-sans font-bold text-ink">{fallback![1].toLocaleString()}</strong> recorded appearances
+        </p>
+      )}
+      {signature?.quote && (
+        <div className="mt-5 text-left border-l-2 border-accent/40 pl-4">
+          <p translate="no" className="notranslate font-serif italic text-sm text-ink leading-relaxed mb-2">
+            &ldquo;{signature.quote.line}&rdquo;
+          </p>
+          <Link
+            href={songPath(artistName, signature.quote.title)}
+            prefetch={false}
+            className="text-[0.65rem] uppercase tracking-wider text-ink-soft font-sans font-semibold block hover:text-accent transition-colors"
+          >
+            — {signature.quote.title}
+            {signature.quote.times >= 3 ? `, sung ${signature.quote.times} times` : ""}
+          </Link>
+        </div>
       )}
     </div>
   );
@@ -297,24 +317,17 @@ const ROMAN = ["I", "II", "III", "IV", "V"];
 
 type Align = "left" | "right";
 
-function TypewriterCard({
-  stat,
-  index,
-  isHero,
-  artistName,
-  align = "left",
-  topWord,
-  songCount,
-}: {
+type CardProps = {
   stat: RankedStat;
   index: number;
   isHero?: boolean;
   artistName?: string;
   align?: Align;
-  topWord?: [string, number];
-  songCount?: number;
-  motifQuote?: { word: string; quote: string; song_title: string } | null;
-}) {
+  /** The signature box, set beside the hero card. */
+  aside?: ReactNode;
+};
+
+function TypewriterCard({ stat, index, isHero, artistName, align = "left", aside }: CardProps) {
   const { ref, revealed } = useScrollReveal(0.25);
   // The hero number is the percentile (always impressive side)
   const displayPct = stat.isHigh
@@ -453,7 +466,7 @@ function TypewriterCard({
 
   return (
     <div ref={ref} className={`max-w-4xl mx-auto ${twPadding[index] || twPadding[2]}`}>
-      {isHero && topWord ? (
+      {isHero && aside ? (
         <div className="grid md:grid-cols-[1fr_280px] gap-8 md:gap-12 items-center">
           <div className={align === "right" ? "text-right" : "text-left"}>
             {cardContent}
@@ -466,7 +479,7 @@ function TypewriterCard({
               transitionDelay: isHero ? "600ms" : "0ms",
             }}
           >
-            <VocalSignatureBox word={topWord[0]} count={topWord[1]} songCount={songCount ?? 0} />
+            {aside}
           </div>
         </div>
       ) : (
@@ -480,25 +493,7 @@ function TypewriterCard({
 
 // ── Animation C: The Ink Bleed ───────────────────────────────────────────────
 
-function InkBleedCard({
-  stat,
-  index,
-  isHero,
-  artistName,
-  align = "left",
-  topWord,
-  songCount,
-  motifQuote,
-}: {
-  stat: RankedStat;
-  index: number;
-  isHero?: boolean;
-  artistName?: string;
-  align?: Align;
-  topWord?: [string, number];
-  songCount?: number;
-  motifQuote?: { word: string; quote: string; song_title: string } | null;
-}) {
+function InkBleedCard({ stat, index, isHero, artistName, align = "left", aside }: CardProps) {
   const { ref, revealed } = useScrollReveal(0.15);
   // Hero number is the percentile (impressive side)
   const displayPct = stat.isHigh
@@ -639,7 +634,7 @@ function InkBleedCard({
       ref={ref}
       className={`relative max-w-4xl mx-auto overflow-hidden ${ibPadding[index] || ibPadding[2]}`}
     >
-      {isHero && topWord ? (
+      {isHero && aside ? (
         <div className="grid md:grid-cols-[1fr_280px] gap-8 md:gap-12 items-center">
           <div className={align === "right" ? "text-right" : "text-left"}>
             {cardContent}
@@ -652,7 +647,7 @@ function InkBleedCard({
               transitionDelay: isHero ? "600ms" : "0ms",
             }}
           >
-            <VocalSignatureBox word={topWord[0]} count={topWord[1]} songCount={songCount ?? 0} quote={motifQuote} />
+            {aside}
           </div>
         </div>
       ) : (
@@ -668,29 +663,31 @@ function InkBleedCard({
 
 type AnimMode = "typewriter" | "inkbleed";
 
-type Motif = { word: string; quote: string; song_title: string; count?: number } | null;
-
 type Props = {
   artistName: string;
   stats: ArtistStats;
-  topFreqNoun: [string, number] | null;
-  /** The quote only when lib/artistEvidence could verify it belongs here. */
-  motif?: Motif;
+  /** From the corpus pass; the box falls back to a frequency label without it. */
+  signature?: Signature | null;
 };
 
-export function ArtistStory({ artistName, stats, topFreqNoun, motif = null }: Props) {
+export function ArtistStory({ artistName, stats, signature = null }: Props) {
   const [mode, setMode] = useState<AnimMode>("typewriter");
   const top3 = rankStats(stats);
   const ALIGNS: Align[] = ["left", "right", "left"];
+  const aside = (
+    <SignatureBox
+      signature={signature}
+      fallback={recurringWord(stats)}
+      artistName={artistName}
+      songCount={stats.song_count}
+    />
+  );
 
   // Artists imported without corpus percentiles (the Genius seeds) get the
   // figures without the "than X% of artists" claims.
-  if (top3.length < 3) return <PlainStory artistName={artistName} stats={stats} />;
+  if (top3.length < 3) return <PlainStory artistName={artistName} stats={stats} aside={aside} />;
 
   const Card = mode === "typewriter" ? TypewriterCard : InkBleedCard;
-  
-  const bestWord = motif?.word || topFreqNoun?.[0] || stats.top_words_no_stop?.[0]?.[0] || "";
-  const bestWordCount = stats.top_words_no_stop?.find(w => w[0] === bestWord)?.[1] || topFreqNoun?.[1] || stats.top_words_no_stop?.[0]?.[1] || 0;
 
   return (
     <div className="mt-16 mb-20">
@@ -732,9 +729,7 @@ export function ArtistStory({ artistName, stats, topFreqNoun, motif = null }: Pr
             isHero={i === 0}
             artistName={i === 0 ? artistName : undefined}
             align={ALIGNS[i]}
-            topWord={[bestWord, bestWordCount]}
-            songCount={stats.song_count}
-            motifQuote={motif}
+            aside={aside}
           />
         ))}
       </div>
@@ -743,19 +738,9 @@ export function ArtistStory({ artistName, stats, topFreqNoun, motif = null }: Pr
 }
 
 
-// Keep the old export for backward compatibility with any existing INDUSTRY_AVG references
-export const INDUSTRY_AVG = {
-  wordsPerSong: 243,
-  wordVariety: 0.41,
-  chorusShare: 0.29,
-  repetition: 0.31,
-};
-
-
 // ── The plain story: figures without rankings ────────────────────────────────
 
-function PlainStory({ artistName, stats }: { artistName: string; stats: ArtistStats }) {
-  const word = recurringWord(stats);
+function PlainStory({ artistName, stats, aside }: { artistName: string; stats: ArtistStats; aside: ReactNode }) {
   const cards = [
     {
       label: "The Output",
@@ -804,7 +789,7 @@ function PlainStory({ artistName, stats }: { artistName: string; stats: ArtistSt
     <div className="mt-16 mb-20 divide-y divide-rule">
       {cards.map((card, i) => (
         <Reveal key={card.label} className={`py-14 sm:py-20 max-w-4xl mx-auto ${i === 1 ? "md:text-right" : ""}`}>
-          <div className={i === 0 && word ? "grid md:grid-cols-[1fr_280px] gap-10 items-center" : ""}>
+          <div className={i === 0 && aside ? "grid md:grid-cols-[1fr_280px] gap-10 items-center" : ""}>
             <div>
               <h3 className="font-serif italic text-2xl sm:text-3xl lg:text-4xl leading-relaxed mb-10">{card.copy}</h3>
               <p className="smallcaps mb-5">
@@ -817,21 +802,7 @@ function PlainStory({ artistName, stats }: { artistName: string; stats: ArtistSt
               <div className="h-px bg-rule-strong my-7" />
               <p className={`text-sm text-ink-mute leading-relaxed max-w-lg ${i === 1 ? "md:ml-auto" : ""}`}>{card.note}</p>
             </div>
-            {i === 0 && word && (
-              <aside className="border border-rule-strong p-7 bg-paper-soft text-center relative shadow-sm">
-                <div className="absolute inset-1 border border-dashed border-rule-strong pointer-events-none" />
-                <p className="smallcaps">A recurring word</p>
-                <p translate="no" className="notranslate font-serif italic text-5xl my-6 break-words">
-                  “{word[0]}”
-                </p>
-                <p className="font-serif text-lg">
-                  <strong>{word[1].toLocaleString()}</strong> recorded appearances
-                </p>
-                <p className="text-xs text-ink-mute mt-3 leading-relaxed">
-                  In the indexed catalogue of {stats.song_count} songs. It may appear in only some of them.
-                </p>
-              </aside>
-            )}
+            {i === 0 && aside && <div className="flex justify-center md:justify-end">{aside}</div>}
           </div>
         </Reveal>
       ))}

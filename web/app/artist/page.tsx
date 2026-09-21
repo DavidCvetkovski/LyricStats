@@ -22,98 +22,9 @@ import { artistCache } from "@/lib/cache";
 import { titleCase } from "@/lib/utils";
 import { ArtistAutocomplete } from "@/components/ArtistAutocomplete";
 import { MusicLinks } from "@/components/MusicLinks";
-import { verifiedMotif } from "@/lib/artistEvidence";
+import { SignatureWords } from "@/components/SignatureWords";
+import { vocabulary } from "@/lib/filler";
 import { songPath } from "@/lib/slug";
-
-const NON_NOUNS = new Set([
-  // Auxiliary / Modal / Pronouns / Stop-words
-  "im", "dont", "cant", "wanna", "gonna", "gotta", "aint", "cause", "cuz", "bout", "em", "ya", "yall", "yeah", "yes", "no", "oh", "ah", "ooh", "uh", "la", "da", "na", "hey", "whoa", "yeh", "let",
-  // Common verbs & filler
-  "know", "get", "got", "go", "make", "see", "say", "come", "want", "look", "tell", "think", "feel", "take", "give", "need", "keep", "find", "leave", "show", "try", "call", "play", "put", "turn", "break", "hold", "bring", "fall", "run", "stop", "hear", "wait", "stand", "live", "die", "believe", "care", "start", "watch", "walk", "mean", "seem", "talk", "miss", "forget", "remember", "cry", "smile", "laugh", "sleep", "wake", "dream", "fly",
-  "like", "still", "even", "back", "thing", "things", "way", "really", "much", "never", "always", "just", "only", "well", "too", "very", "so", "also", "another", "other", "ro", "dem", "dat", "dis", "tha", "imma",
-  // Adjectives / Adverbs
-  "good", "bad", "right", "wrong", "true", "false", "real", "fake", "hot", "cold", "high", "low", "fast", "slow", "hard", "soft", "new", "old", "young", "early", "late", "first", "last", "next", "only", "just", "very", "too", "so", "much", "little", "more", "less", "always", "never", "sometimes", "often", "now", "then", "soon", "later", "today", "tomorrow", "yesterday", "tonight", "here", "there", "up", "down", "in", "out", "on", "off", "over", "under", "above", "below", "behind", "front", "back", "left", "right", "near", "far", "close", "away", "well", "better", "best", "worse", "worst", "all", "some", "any", "none", "every", "both", "many", "few", "other", "same", "different", "own", "really",
-  // Specific English generic/fallback adverbs and verbs
-  "yet", "wouldve", "shouldve", "couldve", "isnt", "didnt", "wasnt", "wont", "wanted", "gave", "saw", "said", "who", "what", "where", "when", "why", "how", "which", "whose", "whom", "this", "that", "these", "those",
-  // BHS non-nouns
-  "znam", "hoću", "neću", "mogu", "nemogu", "volim", "želim", "kažem", "mislim", "vidim", "čujem", "idem", "dođem", "čekam", "dajem", "uzmem", "dobar", "loš", "lep", "ružan", "veliki", "mali", "dug", "kratak", "brz", "spor", "topao", "hladan", "nov", "star", "mlad", "jak", "slab", "lak", "težak", "pun", "prazan", "moj", "tvoj", "njegov", "njen", "naš", "vaš", "njihov", "ovo", "ono", "to", "sve", "ništa", "nešto", "svako", "niko", "neko", "uvek", "nikad", "ponekad", "često", "retko", "sada", "onda", "posle", "pre", "juče", "danas", "sutra", "ovde", "tamo", "negde", "svuda", "nigde", "da", "ne", "možda", "kao", "kako", "zašto", "zato", "ali", "ili", "ako", "jer", "dok", "kroz", "preko", "oko", "sa", "bez", "iz", "od", "do", "na", "u", "po", "o", "pri", "k", "ka", "uz", "niz", "jako", "mnogo", "malo", "više", "manje", "samo", "još", "već", "tek", "baš", "čak", "zar", "šta", "ko", "koji", "kakav", "koliki", "čiji", "sam", "si", "je", "smo", "ste", "su", "cu", "ces", "ce", "cemo", "cete", "ću", "ćeš", "će", "ćemo", "ćete", "te", "me", "se", "mi", "ti", "mu", "joj", "nam", "vam", "im", "ih", "nas", "vas",
-  // Top 30 Universal English Cliches
-  "love", "time", "girl", "boy", "baby", "way", "day", "night", "life", "heart", "man", "woman", "thing", "cause", "world", "mind", "eye", "eyes", "face", "word", "nothing", "everything", "yeah", "shit", "nigga", "niggas", "bitch", "bitches", "fuck", "money",
-  // Top 15 Universal Balkan Cliches
-  "ljubav", "srce", "duša", "oči", "noć", "dan", "život", "suze", "bol", "tuga", "pesma", "pjesma", "sreća", "zora", "nebo", "balkan"
-]);
-
-const AD_LIBS = new Set(["ooh", "ah", "oh", "uh", "la", "da", "na", "hey", "whoa", "yeh", "yeah", "imma", "yes", "no"]);
-
-function getTopNoun(
-  signatureWords?: [string, number, number][] | null,
-  topWordsNoStop?: [string, number][] | null
-): [string, number] | null {
-  // 1. If we have Signature Words, use Mathematical Scoring: Count * Log(Ratio)
-  if (signatureWords && signatureWords.length > 0) {
-    const scoredWords = signatureWords.map(w => {
-      const cleanWord = w[0].replace(/['’]/g, "").toLowerCase();
-      // Score = Count * Max(0, Log(Ratio))
-      const score = w[1] * Math.max(0, Math.log(w[2]));
-      return { word: w[0], cleanWord, count: w[1], score, original: w };
-    });
-
-    // Sort by highest score
-    scoredWords.sort((a, b) => b.score - a.score);
-
-    // Signature scores are already precomputed. A small language-neutral filter
-    // avoids downloading and initializing an English tagging dictionary.
-    for (const item of scoredWords) {
-      if (item.word.length <= 2) continue;
-      if (item.word.includes("'") || item.word.includes("’")) continue;
-      if (!NON_NOUNS.has(item.cleanWord)) {
-        return [item.word, item.count];
-      }
-    }
-  }
-
-  // 2. Absolute Desperate Fallback to Top Frequency Words
-  if (topWordsNoStop && topWordsNoStop.length > 0) {
-    for (const [w, c] of topWordsNoStop) {
-      if (w.length <= 2) continue;
-      if (w.includes("'") || w.includes("’")) continue;
-
-      const cleanWord = w.replace(/['’]/g, "").toLowerCase();
-      if (!NON_NOUNS.has(cleanWord)) {
-        return [w, c];
-      }
-    }
-    // Final desperate return
-    for (const [w, c] of topWordsNoStop) {
-      if (!w.includes("'") && !w.includes("’")) return [w, c];
-    }
-    return topWordsNoStop.length > 0 ? topWordsNoStop[0] : null;
-  }
-
-  return null;
-}
-
-function getTopFreqNoun(topWordsNoStop?: [string, number][] | null): [string, number] | null {
-  if (!topWordsNoStop || topWordsNoStop.length === 0) return null;
-
-  // Use the stored frequency order, omitting the existing ad-lib list.
-  for (const [w, c] of topWordsNoStop) {
-    if (w.length <= 2) continue;
-    if (w.includes("'") || w.includes("’")) continue;
-    const cleanWord = w.replace(/['’]/g, "").toLowerCase();
-    if (AD_LIBS.has(cleanWord)) continue;
-    return [w, c];
-  }
-
-  for (const [w, c] of topWordsNoStop) {
-    if (!w.includes("'") && !w.includes("’")) {
-      const cleanWord = w.replace(/['’]/g, "").toLowerCase();
-      if (!AD_LIBS.has(cleanWord)) return [w, c];
-    }
-  }
-
-  return topWordsNoStop.length > 0 ? topWordsNoStop[0] : null;
-}
 
 export default function ArtistPage() {
   return (
@@ -466,9 +377,8 @@ function ArtistView({ data }: { data: ArtistPayload }) {
   const hasSections = data.has_sections ?? data.songs.some((song) => song.has_sections);
   // Dataset aggregates have no per-song catalogue to show.
   const hasCatalogue = data.songs.length > 0;
-  const motif = verifiedMotif(data);
-  const topNoun = getTopNoun(s.signature_words, s.top_words_no_stop);
-  const topFreqNoun = getTopFreqNoun(s.top_words_no_stop);
+  const signature = s.signature ?? null;
+  const staples = vocabulary(s.top_words_no_stop);
 
   return (
     <article ref={containerRef} className="mt-16 rise">
@@ -493,12 +403,12 @@ function ArtistView({ data }: { data: ArtistPayload }) {
         )}
         {data.source === "cache" && data.cached_total > data.sampled && (
           <p className="mt-2 text-[0.78rem] italic text-ink-mute">
-            a random sample of {data.sampled} drawn from a catalogue of {data.cached_total}
+            Read from a sample of {data.sampled} songs out of a catalogue of {data.cached_total}.
           </p>
         )}
         {data.source === "dataset" && data.cached_total > data.sampled && (
           <p className="mt-2 text-[0.78rem] italic text-ink-mute">
-            full catalogue analysis • top {data.sampled} longest songs displayed below
+            The figures read all {data.cached_total.toLocaleString()} songs; the {data.sampled} longest are listed below.
           </p>
         )}
       </header>
@@ -507,63 +417,31 @@ function ArtistView({ data }: { data: ArtistPayload }) {
       <ArtistStory
         artistName={data.name}
         stats={s}
-        topFreqNoun={topFreqNoun}
-        motif={motif}
+        signature={signature}
       />
 
       <HighlightsShowcase stats={s} artistName={data.name} />
 
-      {/* Put WordTable and Top Noun side-by-side */}
-      {s.top_words_no_stop && s.top_words_no_stop.length > 0 && (
-        <section className="mt-16 sm:mt-24 max-w-5xl mx-auto px-4">
-          {(() => {
-            if (!topNoun) return null;
-            return (
-              <div className="grid md:grid-cols-[auto_auto_auto] gap-8 md:gap-20 items-start justify-center w-full">
-
-                {/* Left Side: Quote Pull (Top Left) */}
-                <div className="flex flex-col max-w-xs opacity-80 pt-2">
-                  <blockquote className="relative pt-4">
-                    <span className="absolute top-0 left-0 text-7xl text-rule font-serif leading-none -ml-5 mt-1">"</span>
-                    <p className="relative z-10 font-serif italic text-lg leading-snug text-ink-soft">
-                      {motif ? (
-                        motif.quote.split(new RegExp(`(${motif.word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, 'gi')).map((part, i) =>
-                          part.toLowerCase() === motif!.word.toLowerCase()
-                            ? <span key={i} className="text-[#B4995F] font-medium">{part}</span>
-                            : part
-                        )
-                      ) : (
-                        <>The word <span className="text-[#B4995F] font-medium">{topNoun[0]}</span> appears {topNoun[1].toLocaleString()} times in this catalogue.</>
-                      )}
-                    </p>
-                    <div className="mt-4 text-xs uppercase tracking-widest text-ink-mute">
-                      — {motif ? motif.song_title : "From the word counts"}
-                    </div>
-                  </blockquote>
-                </div>
-
-                {/* Center: The Motif (Noun) - Pushed Down */}
-                <div className="flex flex-col justify-center items-start md:items-end md:text-right pt-6 md:mt-32 md:-translate-x-6">
-                  <div className="smallcaps text-ink-mute mb-4 md:mb-6">The Signature</div>
-                  <div translate="no" className="notranslate text-7xl sm:text-8xl lg:text-[7rem] leading-none font-serif italic text-[#B4995F] tracking-tight mb-6">
-                    {(motif?.word || topNoun[0]).toLowerCase()}
-                  </div>
-                  <p className="font-serif italic text-ink-soft text-lg sm:text-xl max-w-[280px]">
-                    A word that stands out in the stored vocabulary. Its frequency is measured; its meaning is yours to read.
-                  </p>
-                </div>
-
-                {/* Right Side: The Lyrical Staples (Table) */}
-                <div className="w-full max-w-xl mx-auto md:mx-0">
-                  <WordTable
-                    title="Lyrical Staples"
-                    rows={s.top_words_no_stop?.filter(w => !w[0].includes("'") && !w[0].includes("’") && !AD_LIBS.has(w[0].toLowerCase()))}
-                    motifWord={topNoun[0]}
-                  />
-                </div>
+      {(staples.length > 0 || signature) && (
+        <section className="mt-16 sm:mt-24">
+          <p className="smallcaps mb-8">The words</p>
+          <div className="grid gap-12 lg:grid-cols-2 lg:gap-20 items-start">
+            {staples.length > 0 && (
+              <div>
+                <WordTable title="The staples" rows={staples} motifWord={signature?.staple?.word} />
+                <p className="mt-3 text-[0.78rem] italic text-ink-mute">
+                  Grammar and ad-libs set aside. The rule beneath each word is its share of the most-used
+                  {signature?.staple
+                    ? `; “${signature.staple.word}” turns up in ${signature.staple.songs} of ${s.song_count} songs`
+                    : ""}
+                  .
+                </p>
               </div>
-            );
-          })()}
+            )}
+            {signature && signature.words.length > 0 && (
+              <SignatureWords signature={signature} by={titleCase(data.name)} />
+            )}
+          </div>
         </section>
       )}
 
