@@ -64,7 +64,7 @@ export default function Home() {
         </p>
 
         {/* Cover stats: the numbers are the artwork */}
-        <div className="mt-8 sm:mt-10 grid grid-cols-2 sm:grid-cols-4 gap-y-6 sm:divide-x sm:divide-[var(--rule-strong)]">
+        <div className="mt-8 sm:mt-10 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-6 sm:gap-x-0 sm:divide-x sm:divide-[var(--rule-strong)]">
           {[
             ["180,713", "words counted"],
             ["19,804", "distinct words"],
