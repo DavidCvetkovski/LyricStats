@@ -379,10 +379,11 @@ def fetch_rows(song: sqlite3.Connection, name: str, gkey: str) -> SongRows:
 
 
 JUNK_QUOTE_TITLE = re.compile(r"\b(vs\.?|remix|mix|mashup|megamix|medley|karaoke|live|edit|version)\b", re.I)
-MASH_UP = re.compile(r"\b(vs\.?|mashup|megamix|medley)\b", re.I)
+MASH_UP = re.compile(r"\b(mash-?up|megamix|medley)\b", re.I)
+VERSUS = re.compile(r"\bvs\.?(?=\s)", re.I)
 VERSION_WORDS = re.compile(
     r"\b(remix(?:ed)?|mix|version|edit|live|session|remaster(?:ed)?|demo|acoustic|extended|"
-    r"radio|karaoke|instrumental|unplugged|sped up|slowed|rework|dub|bootleg|vip)\b", re.I)
+    r"karaoke|instrumental|unplugged|sped up|slowed|rework|dub|bootleg)\b", re.I)
 VERSION_TAIL = re.compile(
     r"^live\b|\b(remix(?:ed)?|mix|version|edit|session|remaster(?:ed)?|demo|acoustic|rework|"
     r"dub|bootleg)$", re.I)
@@ -395,6 +396,15 @@ def version_clauses(title: str) -> list[str]:
     if len(parts) > 1 and VERSION_TAIL.search(parts[-1].strip()):
         out.append(parts[-1])
     return out
+
+
+def mash_up(title: str) -> bool:
+    """A mash-up: named one, or a short bracket pairing two acts ("(Adele vs. Robin S.)").
+    A title that is itself a match-up ("Knife Vs Flesh") is a song of its own."""
+    if MASH_UP.search(title):
+        return True
+    return any(VERSUS.search(m.group(0)) and len(m.group(0).split()) <= 6
+               for m in re.finditer(r"[(\[][^)\]]*[)\]]", title))
 
 
 def display_title(title: str) -> str:
@@ -419,10 +429,11 @@ def hook_quote(lines: list[tuple[int, str, str]], own: set[str] = frozenset()) -
         n = len(line.split())
         if n < 3 or n > 16 or line.startswith("[") or line.isupper():
             continue
-        if MASH_UP.search(title):
+        if mash_up(title):
             continue
         clauses = version_clauses(title)
-        if own and any(own & set(TOKEN_RE.findall(c.lower())) for c in clauses):
+        if own and any(own & {re.sub(r"['’]s$", "", w) for w in TOKEN_RE.findall(c.lower())}
+                       for c in clauses):
             continue
         score = times + (4 if 5 <= n <= 12 else 0) + min(n, 8) / 10
         if JUNK_QUOTE_TITLE.search(title):
@@ -452,7 +463,8 @@ def signature(display: str, rows: SongRows, idx: list[int], df: DF,
 
     lang = classify([w for w, _c in uses.most_common(30)])
     forbidden = name_tokens(display)
-    own = {w for w in forbidden if len(w) >= 3 and not VERSION_WORDS.fullmatch(w)}
+    own = {w for w in forbidden
+           if len(w) >= 3 and not VERSION_WORDS.fullmatch(w) and w not in ANY_FUNCTION_WORD}
     floor = max(3, math.ceil(0.06 * n))
 
     def usable(w: str) -> bool:
