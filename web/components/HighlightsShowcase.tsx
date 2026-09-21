@@ -42,6 +42,7 @@ export function HighlightsShowcase({ stats, artistName }: Props) {
                   <Link
                     href={songPath(artistName, item.title)}
                     prefetch={false}
+                    tabIndex={group === 2 ? -1 : undefined}
                     className="group flex flex-col items-center gap-1 no-underline"
                   >
                     <span className="smallcaps tracking-widest text-[0.65rem]">{item.label}</span>
