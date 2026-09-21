@@ -147,6 +147,24 @@ def test_song_serves_cached_text_without_provider(temp_db, monkeypatch):
     assert out["slug"] == {"artist": "drake", "title": "halo"}
 
 
+def test_song_rereads_an_old_cache_entry_but_keeps_its_clock(temp_db, monkeypatch):
+    artist = db.get_or_create_artist("Drake")
+    saved = db.upsert_song(artist, title="Halo", lyrics="Halo, halo\nHalo, halo\nHalo, halo\nNever let go")
+    st = main.stats.compute(saved.lyrics).to_dict()
+    # A reading stored before the marks existed: no drop_at, but a clock.
+    st["reading"] = {"wc": 9, "uniq": 4, "ttr": 0.44, "rep": 0.5, "first": 12.5,
+                     "curve": [1] * 10, "duration": 200.0, "wpm": 2.7}
+    db.save_stats(saved, st)
+    monkeypatch.setattr(main.fetch, "fetch_song", _no_provider)
+    out = main.song(artist="Drake", title="Halo")
+    r = out["reading"]
+    assert r["drop_at"] == [0, 1, 2]
+    assert r["top_line_n"] == 3
+    assert (r["first"], r["duration"], r["wpm"]) == (12.5, 200.0, 2.7)
+    remembered = db.load_stats(db.find_song_by_key(artist, "Halo"))["reading"]
+    assert remembered["drop_at"] == [0, 1, 2] and remembered["first"] == 12.5
+
+
 def test_song_resolves_slugs_through_the_catalogue(temp_db, monkeypatch):
     _add_dataset("Beyoncé", 2, [HALO, CRAZY])
     calls = []
