@@ -604,8 +604,8 @@ def main() -> None:
 
         if name in prod:
             ptitles = prod[name]
-            psig = sig if [t for t, _ in ptitles] == [t for t, _ in titles] else signature(
-                display, srows, srows.pick(ptitles), df, curated=curated)
+            same = {normalize_key(t) for t, _ in ptitles} == {normalize_key(t) for t, _ in titles}
+            psig = sig if same else signature(display, srows, srows.pick(ptitles), df, curated=curated)
             prod_patches[name] = {"signature": psig, "percentiles": pct}
 
         if k % 1000 == 0:
