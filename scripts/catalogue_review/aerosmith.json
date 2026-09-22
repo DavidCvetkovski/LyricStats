@@ -1,0 +1,14 @@
+{
+ "artist": "Aerosmith",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Just Feel Better (Santana Feat. Steven Tyler)": "Santana",
+  "Kramer Solo": "a drum solo",
+  "South Station Blues (Joe Perry Project)": "The Joe Perry Project",
+  "Boulevard Of Broken Songs": "a mash-up",
+  "Rats in the Cellar-I Wanna Know Why-Big Ten Inch Record": "a medley"
+ },
+ "keep": [
+  "Come Together"
+ ]
+}
