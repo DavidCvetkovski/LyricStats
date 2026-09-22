@@ -1,0 +1,37 @@
+{
+ "artist": "Waylon Jennings",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Highwayman": "The Highwaymen",
+  "American Remains": "The Highwaymen",
+  "Silver Stallion": "The Highwaymen",
+  "Against the Wind": "The Highwaymen",
+  "Live Forever": "The Highwaymen",
+  "Anthem '84": "The Highwaymen",
+  "Living Legend": "The Highwaymen",
+  "The Last Cowboy Song": "The Highwaymen",
+  "Jim, I Wore a Tie Today": "The Highwaymen",
+  "Big River": "The Highwaymen",
+  "Commited to Parkview": "The Highwaymen",
+  "Welfare Line": "The Highwaymen",
+  "The Twentieth Century Is Almost Over": "The Highwaymen",
+  "Born and Raised in Black and White": "The Highwaymen",
+  "Texas": "The Highwaymen",
+  "I Do Believe": "The Highwaymen",
+  "They Killed Him": "The Highwaymen",
+  "City of New Orleans - Live at Nassau Coliseum, Uniondale, NY - March 1990": "The Highwaymen",
+  "On the Road Again - Live at Nassau Coliseum, Uniondale, NY - March 1990": "The Highwaymen",
+  "She'd Rather Be Homeless": "Old Dogs (Waylon, Bobby Bare, Jerry Reed, Mel Tillis)",
+  "I Don't Do It No More": "Old Dogs (Waylon, Bobby Bare, Jerry Reed, Mel Tillis)",
+  "Me And Jimmie Rodgers": "Old Dogs (Waylon, Bobby Bare, Jerry Reed, Mel Tillis)",
+  "The King Is Gone (So Are You) - Live at Nassau Coliseum, Uniondale, NY - March 1990": "a Highwaymen live copy",
+  "Lonesome On'ry & Mean": "second copy of Lonesome, On'ry And Mean",
+  "Teddy Bear Song": "second copy of The Teddy Bear Song",
+  "I Will Always Love You (In My Own Crazy Way)": "second copy of I'll Always Love You (In My Own Crazy Way)"
+ },
+ "keep": [],
+ "rename": {
+  "Help Me Make It Through The Night-1": "Help Me Make It Through The Night",
+  "Saly Was a Good Girl": "Sally Was a Good Girl"
+ }
+}
