@@ -121,3 +121,14 @@ def test_a_review_drops_keeps_or_lists_the_whole_catalogue():
     assert {s.title: s.reason for s in songs}["Bad Blood"] == "reviewed: a test"
     songs = clean(rows, toks, display="Taylor Swift", gkey="taylorswift", review={"only": ["Style", "Love Story"]})
     assert _kept(songs) == ["Love Story", "Style"]
+
+
+def test_hindi_uploads_of_one_song_merge_though_the_tokenizer_left_short_words():
+    # "लग जा गले" is stored as "लग ज गल": most words of a Hindi text are one or two letters
+    gale = "लग गल हस यद इस जनम हमक आज घड़ नस आपक फर "
+    retyped = gale.replace("घड़", "घड")  # a second transcription
+    liye = "तर लय जय हम नम सब कह तम मन पर वफ़ दर "
+    rows, toks = _rows([("Lag Ja Gale", gale * 3, 5, 200), ("Lagja Gale", retyped * 3, 2, 200),
+                        ("Tere Liye", liye * 3, 4, 200)], artist="Lata Mangeshkar")
+    songs = clean(rows, toks, display="Lata Mangeshkar", gkey="latamangeshkar")
+    assert _kept(songs) == ["Lag Ja Gale", "Tere Liye"]

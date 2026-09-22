@@ -67,7 +67,8 @@ NON_SONG_RE = re.compile(
     r"\b(?:voice[- ]?over|voice memo|interview|commentary|track by track|message from|"
     r"radio promo|spoken intro|audio book|audiobook|chapter \d|kapitel \d|"
     r"behind the scenes|making of|album preview|phone call with|phone conversation|"
-    r"press conference|acceptance speech|liner notes|tracklist|full album)\b",
+    r"press conference|acceptance speech|liner notes|tracklist|full album|spoken interlude|"
+    r"band introductions?|introducing the band|pr[ée]sentation des musiciens|radio spot)\b",
     re.I,
 )
 # A clause that credits a remixer ("(Avicii Remix)", "- Alec Empire Mix"); a
@@ -155,8 +156,15 @@ def display_title(title: str, artist_words: str) -> str:
 # ── lyrics ───────────────────────────────────────────────────────────────────
 
 
+# Scripts whose vowel signs the word tokenizer drops ("गले" is stored as "गल"),
+# leaving words of one or two letters: count the two-letter ones as content, or
+# a Hindi song has too few words to be compared with its other uploads.
+SPLIT_SCRIPT_RE = re.compile(r"[\u0900-\u0DFF\u0E00-\u0EFF\u0F00-\u0FFF\u1000-\u109F\u1780-\u17FF]")
+
+
 def content(cnt: Counter) -> Counter:
-    return Counter({w: c for w, c in cnt.items() if len(w) > 2 and w not in STOPWORDS})
+    return Counter({w: c for w, c in cnt.items()
+                    if (len(w) > 2 or (len(w) == 2 and SPLIT_SCRIPT_RE.match(w))) and w not in STOPWORDS})
 
 
 def containment(a: Counter, b: Counter) -> float:
