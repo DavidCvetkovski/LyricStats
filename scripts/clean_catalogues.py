@@ -669,7 +669,13 @@ def main() -> None:
     if args.fold:
         fold_all(args.workers, args.chunks)
     if args.refold_reviewed:
-        fold_all(args.workers, args.chunks, only=sorted(load_reviews()))
+        # reviewed artists, and the pages the hand-made aliases fold names into
+        manual = set()
+        if os.path.exists(MANUAL_ALIAS_PATH):
+            with open(MANUAL_ALIAS_PATH, encoding="utf-8") as fh:
+                manual = {line.split("\t")[0].strip() for line in fh if line.strip() and not line.startswith("#")}
+        targets = {aliases()[a] for a in manual if a in aliases()}
+        fold_all(args.workers, args.chunks, only=sorted((set(load_reviews()) | targets) - set(aliases())))
     if args.top and args.sheets:
         sheets(args.top, args.sheets, args.start, must)
     if args.corpus:
