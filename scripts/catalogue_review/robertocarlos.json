@@ -1,0 +1,14 @@
+{
+ "artist": "Roberto Carlos",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Emoções - Ao Vivo em Jerusalém": "live copy of Emoções",
+  "Pedro E O Lobo, Op. 67": "a spoken narration of Peter and the Wolf"
+ },
+ "keep": [],
+ "rename": {
+  "Luoco Por Você": "Louco Por Você",
+  "Quiero Que Todo Vaya Al In": "Quiero Que Todo Vaya Al Infierno"
+ },
+ "note": "Portuguese, Spanish and Italian recordings are separate songs"
+}

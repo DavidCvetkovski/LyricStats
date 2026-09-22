@@ -67,7 +67,7 @@ MEDLEY_GUARD = True
 VERSION_WORD_RE = re.compile(
     r"\b(?:remix(?:ed)?|mix|edit|rework|bootleg|dub|version|flip|refix|vip|remode|"
     r"re-?edit|cover|live|acoustic|instrumental|a ?capp?ella|sped up|slowed|"
-    r"demo|snippet|teaser|preview|remaster(?:ed)?|mono|stereo)\b",
+    r"demo|snippet|teaser|preview|remaster(?:ed|i[sz]ad[ao]|is[ée]e?)?|mono|stereo|ao vivo|en vivo|en directo)\b",
     re.I,
 )
 # a bracket clause, or one cut off by a truncated title: "A Kind Of Magic (Demo"
@@ -155,9 +155,13 @@ def display_title(title: str, artist_words: str) -> str:
     t = TITLE_JUNK_RE.sub("", t)
     t = strip_track_no(t)
     t = strip_artist(t, artist_words)
-    for c in version_clauses(t):
-        t = t.replace(c, "")
-    t = re.sub(r"\s*[-–—]\s*$", "", t)
+    for _ in range(3):  # "Proposta - Versão Remasterizada (Ao Vivo)": a clause inside a clause
+        cs = version_clauses(t)
+        if not cs:
+            break
+        for c in cs:
+            t = t.replace(c, "")
+        t = re.sub(r"\s*[-–—]\s*$", "", t.strip())
     t = re.sub(r"\s{2,}", " ", t).strip(" -–")
     return t or plain(title)
 
