@@ -10,6 +10,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 import json
+import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -50,6 +51,34 @@ def slugify(name: str) -> str:
     s = "".join(c for c in s if not unicodedata.combining(c)).lower()
     s = "".join(c if c.isalnum() else "-" for c in s)
     return "-".join(part for part in s.split("-") if part)
+
+
+# Words, with '&' and '+' as words of their own ('Simon&Garfunkel' -> simon & garfunkel).
+_NAME_TOKENS = re.compile(r"[^\W_]+|[&+]")
+
+
+def _joiner_variants(name: str) -> list[str]:
+    """Other keys a name joined by '&', '+' or 'and' may be filed under.
+
+    normalize_key drops '&' but keeps 'and', so 'Emerson, Lake & Palmer'
+    misses a page filed as 'emersonlakeandpalmer', and 'Simon and Garfunkel'
+    misses 'simongarfunkel'. Gives the joiner read as 'and', then dropped.
+    Only a joiner between two words counts: 'And One', 'Johnny Winter And'
+    and 'Prozac+' have none.
+    """
+    s = unicodedata.normalize("NFKD", name or "")
+    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
+    toks = _NAME_TOKENS.findall(s)
+    inner = range(1, len(toks) - 1)
+    spelled = ["and" if i in inner and t in ("&", "+") else t for i, t in enumerate(toks)]
+    dropped = [t for i, t in enumerate(spelled) if not (i in inner and t == "and")]
+    exact = normalize_key(name)
+    out: list[str] = []
+    for words in (spelled, dropped):
+        key = "".join(t for t in words if t not in ("&", "+"))
+        if key and key != exact and key not in out:
+            out.append(key)
+    return out
 
 
 class Artist(SQLModel, table=True):
@@ -331,16 +360,23 @@ def mark_catalogue_fetched(artist: Artist) -> None:
 def get_artist_aggregate(name: str) -> "ArtistAggregate | None":
     """Exact-or-very-close lookup: matches on the aggressive name_key so
     casing/accents/punctuation differences auto-resolve. On the rare key
-    collision, prefer the artist with the larger catalogue."""
+    collision, prefer the artist with the larger catalogue. Only when the
+    exact key has no row, a name joined by '&', '+' or 'and' is tried under
+    its other spelling ('Mumford & Sons' finds 'Mumford And Sons')."""
     key = normalize_key(name)
     if not key:
         return None
+    by_size = ArtistAggregate.song_count.desc()  # type: ignore[attr-defined]
     with read_session() as s:
-        return s.exec(
-            select(ArtistAggregate)
-            .where(ArtistAggregate.name_key == key)
-            .order_by(ArtistAggregate.song_count.desc())  # type: ignore[attr-defined]
-        ).first()
+        row = s.exec(select(ArtistAggregate).where(ArtistAggregate.name_key == key).order_by(by_size)).first()
+        variants = _joiner_variants(name) if row is None else []
+        if variants:
+            row = s.exec(
+                select(ArtistAggregate)
+                .where(ArtistAggregate.name_key.in_(variants))  # type: ignore[attr-defined]
+                .order_by(by_size)
+            ).first()
+    return row
 
 
 @dataclass(frozen=True)
@@ -361,7 +397,13 @@ def search_artist_aggregates(q: str, limit: int = 8) -> list[ArtistSuggestion]:
     key = normalize_key(q)
     if len(key) < 2:
         return []
-    return [ArtistSuggestion(display_name=n, song_count=c) for n, c in _search_cached(key, limit)]
+    rows = list(_search_cached(key, limit))
+    variants = _joiner_variants(q)
+    if variants:  # 'Mumford & So' also looks under 'mumfordandso', biggest first
+        for v in variants:
+            rows += _search_cached(v, limit)
+        rows = sorted(dict(rows).items(), key=lambda r: -r[1])[:limit]
+    return [ArtistSuggestion(display_name=n, song_count=c) for n, c in rows]
 
 
 @lru_cache(maxsize=2048)

@@ -270,6 +270,16 @@ def test_artist_titles_lists_the_catalogue(temp_db):
     assert main.artist_titles(name="jay-z") == {"name": "jay-z", "titles": ["Empire State of Mind"]}
 
 
+
+def test_an_ampersand_finds_a_page_filed_under_and(temp_db, monkeypatch):
+    _add_dataset("Emerson Lake and Palmer", 1, [["Lucky Man", 1970, 150, 80, 0.5, 0.2, 0.1, 1]])
+    pool = main.artist_pool(name="Emerson, Lake & Palmer", min=500, fresh=False, shuffle="")
+    assert pool["name"] == "Emerson Lake and Palmer" and "suggestion" not in pool
+    assert main.artist_titles(name="Emerson, Lake & Palmer")["titles"] == ["Lucky Man"]
+    monkeypatch.setattr(main.fetch, "fetch_song", _unavailable([]))
+    out = main.song(artist="Emerson, Lake & Palmer", title="lucky man")
+    assert out["slug"] == {"artist": "emerson-lake-and-palmer", "title": "lucky-man"}
+
 def test_autocomplete_uses_one_compact_read_without_lyrics(temp_db):
     from sqlalchemy import event
 

@@ -179,4 +179,22 @@ describe("api client library", () => {
     await suggestArtists("Jay", 20);
     expect(fetch).toHaveBeenCalledTimes(2);
   });
+
+  it("asks the server again for a name with a joiner instead of narrowing a cached list", async () => {
+    const { suggestArtists, getCachedArtistSuggestions } = await import("./api");
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ suggestions: [{ name: "Mumford", song_count: 20 }] }),
+    } as Response);
+    await suggestArtists("Mumf", 8);
+    expect(getCachedArtistSuggestions("Mumford", 8)).toEqual([{ name: "Mumford", song_count: 20 }]);
+    expect(getCachedArtistSuggestions("Mumford & So", 8)).toBeNull();
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ suggestions: [{ name: "Mumford And Sons", song_count: 170 }] }),
+    } as Response);
+    await suggestArtists("Mumford & So", 8);
+    expect(getCachedArtistSuggestions("Mumford & So", 8)).toEqual([{ name: "Mumford And Sons", song_count: 170 }]);
+    expect(getCachedArtistSuggestions("Mumford So", 8)).not.toEqual([{ name: "Mumford And Sons", song_count: 170 }]);
+  });
 });

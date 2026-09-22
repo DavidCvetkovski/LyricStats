@@ -1,6 +1,6 @@
 import type { ArtistPayload, SongPayload } from "./types";
 import { MemoryCacheStore } from "./cache";
-import { artistKey } from "./utils";
+import { artistKey, joinerVariants } from "./utils";
 
 // In production NEXT_PUBLIC_API_BASE points at the Vercel Python API project
 // (e.g. https://api.lyricstats.dev), so the browser calls it directly
@@ -51,11 +51,19 @@ export type ArtistSuggestion = { name: string; song_count: number };
 // window so catalogue updates become visible during long browsing sessions.
 const suggestionCache = new MemoryCacheStore<ArtistSuggestion[]>(100, 5 * 60 * 1000);
 
+// "Mumford & Sons" and "Mumford Sons" share a key but not an answer: the
+// joiner also finds "Mumford And Sons", so it is part of the cache key.
+function queryKey(q: string): string {
+  return [artistKey(q), ...joinerVariants(q)].join("|");
+}
+
 export function getCachedArtistSuggestions(q: string, limit = 8): ArtistSuggestion[] | null {
   const key = artistKey(q);
   if (key.length < 2) return [];
-  const exact = suggestionCache.get(`${limit}:${key}`);
+  const exact = suggestionCache.get(`${limit}:${queryKey(q)}`);
   if (exact) return exact;
+  // Narrowing by one key would drop the name's other spelling.
+  if (joinerVariants(q).length) return null;
 
   // Only a complete prefix result can safely answer a narrower query. A list
   // capped at `limit` may omit the very artist the longer query is looking for.
@@ -90,7 +98,7 @@ export function suggestArtists(
     `/api/artist/suggest?${query.toString()}`,
     { signal },
   ).then((r) => {
-    if (!signal?.aborted) suggestionCache.set(`${limit}:${artistKey(q)}`, r.suggestions);
+    if (!signal?.aborted) suggestionCache.set(`${limit}:${queryKey(q)}`, r.suggestions);
     return r.suggestions;
   });
 }

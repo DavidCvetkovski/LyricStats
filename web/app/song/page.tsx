@@ -31,6 +31,9 @@ function SongSearch() {
   const [title, setTitle] = useState("");
   const [titles, setTitles] = useState<string[]>([]);
   const titlesFor = useRef("");
+  // The catalogue's own name for what was typed ("Mumford & Sons" is filed as
+  // "Mumford And Sons"): a slug of the typed name would lose the "&".
+  const resolved = useRef<{ typed: string; name: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Old links carried the song in the query string; send them to its page.
@@ -59,6 +62,7 @@ function SongSearch() {
       .then((r) => {
         if (ac.signal.aborted) return;
         titlesFor.current = wanted.toLowerCase();
+        resolved.current = r.titles.length ? { typed: wanted.toLowerCase(), name: r.name } : null;
         setTitles(r.titles);
       })
       .catch(() => {
@@ -71,7 +75,8 @@ function SongSearch() {
     const t = chosen.trim();
     if (!a || !t) return;
     saveLastSong({ artist: a, title: t });
-    router.push(songPath(a, t) + hash);
+    const known = resolved.current?.typed === a.toLowerCase() ? resolved.current.name : a;
+    router.push(songPath(known, t) + hash);
   }
 
   function onSubmit(e: React.FormEvent) {

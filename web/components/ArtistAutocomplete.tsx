@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { getCachedArtistSuggestions, suggestArtists, type ArtistSuggestion } from "@/lib/api";
-import { artistKey } from "@/lib/utils";
+import { artistKey, nameMatches } from "@/lib/utils";
 import { Highlight } from "./Highlight";
 
 type Props = {
@@ -90,7 +90,7 @@ export function ArtistAutocomplete({
 
     // Keep matching rows during debounce, but never offer an unrelated result
     // left over from an earlier query.
-    setItems((previous) => previous.filter((item) => artistKey(item.name).includes(key)));
+    setItems((previous) => previous.filter((item) => nameMatches(item.name, q)));
     setActive(-1);
     // 2. Debounced fetch.
     const ac = new AbortController();
