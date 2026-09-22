@@ -1,0 +1,12 @@
+{
+ "artist": "Lenny Kravitz",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Stop Crying Your Heart Out (BBC Radio 2 Allstars)": "the BBC Radio 2 Allstars charity single",
+  "Time Of Our Life": "another act's song"
+ },
+ "keep": [],
+ "rename": {
+  "Don't Go And Put A Bullet In Y": "Don't Go And Put A Bullet In Your Head"
+ }
+}

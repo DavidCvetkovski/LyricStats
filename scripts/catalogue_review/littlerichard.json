@@ -1,0 +1,15 @@
+{
+ "artist": "Little Richard",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Tutti Fruitti": "second copy of Tutti Frutti",
+  "Whole Lotta Shakin' Going On": "second copy of Whole Lotta Shakin' Goin' On",
+  "Whole Lotta Shakin'": "second copy of Whole Lotta Shakin' Goin' On",
+  "A Whole Lotta Shakin' Goin' On": "second copy of Whole Lotta Shakin' Goin' On",
+  "Lawdy Miss Claudie": "second copy of Lawdy Miss Clawdy",
+  "Goin' Home Tomorrow": "second copy of Going Home Tomorrow",
+  "Radio Spot A": "a radio spot, not a song",
+  "She Knows How to Rock (false starts 1, 2 & 3)": "false starts, not a song"
+ },
+ "keep": []
+}
