@@ -1,7 +1,11 @@
 {
  "artist": "Earth, Wind & Fire",
  "reviewed": "2026-09-22",
- "drop": {},
+ "drop": {
+  "Dialog": "an interview",
+  "Meet Earth, Wind & Fire": "stage talk",
+  "Stand by Me": "Maurice White solo"
+ },
  "keep": [],
  "note": "Folds in the halves of the credit the first importer split (scripts/catalogue_review/_aliases_manual.tsv)."
 }
