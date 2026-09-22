@@ -648,11 +648,17 @@ def prod_remove(path: str) -> None:
     from build_signatures import prod_url
 
     with open(path, encoding="utf-8") as fh:
-        names = sorted({r["name"] for r in json.load(fh)})
+        listed = json.load(fh)
     with psycopg.connect(prod_url(), connect_timeout=15) as conn:
+        keys = {k for (k,) in conn.execute("SELECT name_key FROM artistaggregate")}
+        # a spelling folded into a page production does not have stays: it is the only page there
+        kept = sorted({r["name"] for r in listed
+                       if r["why"].startswith("folded into ") and r["why"].removeprefix("folded into ") not in keys})
+        names = sorted({r["name"] for r in listed} - set(kept))
         cur = conn.execute("DELETE FROM artistaggregate WHERE name = ANY(%s)", (names,))
         conn.commit()
-    print(f"removed {cur.rowcount:,} production rows of {len(names):,} listed", flush=True)
+    print(f"removed {cur.rowcount:,} production rows of {len(names):,} listed; kept {kept} "
+          f"(their page is not in production)", flush=True)
 
 
 def main() -> None:
