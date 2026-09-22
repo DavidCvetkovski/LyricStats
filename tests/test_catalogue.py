@@ -241,3 +241,13 @@ def test_a_spelling_of_a_duo_keeps_its_page_but_a_piece_or_a_scramble_of_it_does
                         ("lakeandpalmeremerson", "Emerson Lake and Palmer"), ("presleyelvis", "Elvis Presley"),
                         ("jrhankwilliams", "Hank Williams Jr.")]:
         assert cc.is_fragment(alias, page), alias
+
+
+def test_a_songs_language_is_read_from_its_most_used_words():
+    import clean_catalogues as cc
+
+    en = " ".join(f"{w} {c}" for w, c in zip("the you and love i me my to in it is baby".split(), range(40, 20, -1)))
+    ko = " ".join(f"{w} {c}" for w, c in zip("사랑 너 나 우리 그대 마음 하늘 오늘 밤 꿈 별 눈물".split(), range(40, 20, -1)))
+    assert cc.song_lang(en) == "en"
+    assert cc.song_lang(ko) == "ko"
+    assert cc.song_lang("love 3 you 2") is None  # too few words to tell

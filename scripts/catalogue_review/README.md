@@ -3,7 +3,8 @@
 One file per artist, named by the artist's key (`lyricstats.db.normalize_key`),
 read by `scripts/clean_catalogues.py` when it folds that artist. The rules in
 `scripts/catalogue.py` run first; a review only corrects them. The top 500
-artists (`output/review/top.tsv`) were reviewed by hand on 2026-09-22.
+artists (`output/review/top.tsv`) were reviewed by hand on 2026-09-22, the
+next 500 (`output/review/next500.tsv`) the day after.
 
 ```json
 {
@@ -63,12 +64,26 @@ Set aside:
 Covers the artist recorded and released are theirs and stay; a live or radio
 cover that was never released is set aside.
 
+`_display.tsv` fixes display names the uploads got wrong ("simon  garfunkel",
+"Beatles (the)"): `name<TAB>display<TAB>why`. Only the display changes; name
+and name_key stay, so every stored link keeps resolving. `--commit` applies it
+locally and `--prod-display` in production.
+
+`_prefer.txt` pins the page's spelling when several spellings fold together
+(the first importer read "Emerson, Lake & Palmer" as "Surname, First").
+
 ## Tools
 
 In `tools/`:
 
 - `compact.py START END [BUDGET]`: the review sheet for ranks START to END,
-  from `data/lrclib/_clean_agg.db` (or `REPORT_DB`).
+  from `data/lrclib/_clean_agg.db` (or `REPORT_DB`) and the ranked list
+  `output/review/top.tsv` (or `TOP_TSV`; ranks 501–1000 are in
+  `output/review/top1000.tsv`).
+- `namesakes.py OUT_DIR [BUDGET]`: hint sheets for pages outside the ranked
+  lists that hold a cluster of songs in a language the page otherwise does not
+  sing in, from albums the rest never appears on — often a namesake. Nothing
+  is dropped automatically: most such clusters are the artist's own.
 - `write_reviews.py < batch.json`: writes review files from
   `{gkey: {"drop": {...}, "keep": [...], "rename": {...}}}`. An existing file
   is added to, never replaced.
