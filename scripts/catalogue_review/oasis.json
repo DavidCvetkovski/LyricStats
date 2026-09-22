@@ -7,7 +7,12 @@
   "El Tiempo Paso": "another act called Oasis",
   "No Se Que Voy a Hacer": "another act called Oasis",
   "Sabor a Almendra": "another act called Oasis",
-  "Ya Me Cance de Esperar": "another act called Oasis"
+  "Ya Me Cance de Esperar": "another act called Oasis",
+  "Scorpio Rising (with Death In Vegas)": "Death in Vegas with Liam Gallagher"
  },
- "keep": []
+ "keep": [],
+ "rename": {
+  "Be Here Now (Remastered)": "Be Here Now",
+  "It's Gettin' Better (Man!!) (Remastered)": "It's Gettin' Better (Man!!)"
+ }
 }
