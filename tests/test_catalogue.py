@@ -178,3 +178,12 @@ def test_a_song_holding_its_own_parts_is_not_a_medley():
     rows, toks = _rows([("Echoes", (SONG_A + SONG_B) * 3, 30, 400), ("Echoes, Part 1", SONG_A * 3, 5, 200),
                         ("Echoes, Part 2", SONG_B * 3, 4, 200)], artist="Pink Floyd")
     assert _kept(clean(rows, toks, display="Pink Floyd", gkey="pinkfloyd")) == ["Echoes"]
+
+
+def test_a_medley_is_known_by_most_of_its_upload_titles():
+    rows, toks = _rows([("Teddy Bear", SONG_A * 3, 20, 180), ("Don't Be Cruel", SONG_B * 3, 20, 200),
+                        ("Teddy Bear / Don't Be Cruel", SONG_C * 3, 5, 200),
+                        ("Teddy Bear-Don't Be Cruel", SONG_C * 3, 4, 200)], artist="Elvis Presley")
+    songs = {s.title: s.reason for s in clean(rows, toks, display="Elvis Presley", gkey="elvispresley")}
+    assert songs["Teddy Bear"] is None and songs["Don't Be Cruel"] is None
+    assert [r for t, r in songs.items() if "Cruel" in t and "Teddy" in t] == ["medley of songs listed separately"]

@@ -250,6 +250,17 @@ def _best_title(rows: list[dict], idx: list[int], artist_words: str) -> str:
     return max(freq, key=score)
 
 
+MEDLEY_SPLIT_RE = re.compile(r"\s+/\s+|\s*/\s*(?=[A-Z])|\s+[xX]\s+|\s+vs\.?\s+")
+
+
+def _names_listed_songs(title: str, own_key: str, keys_here: set[str], artist_words: str) -> bool:
+    """A title of two or more parts, one of them another song of this catalogue."""
+    t = re.sub(r"^\s*medley\s*:\s*", "", title, flags=re.I)
+    parts = [p for p in MEDLEY_SPLIT_RE.split(t) if p.strip()]
+    return len(parts) > 1 and all(len(_alnum_squash(p)) >= 3 for p in parts) \
+        and any(title_key(p, artist_words) in keys_here - {own_key} for p in parts)
+
+
 def _key(s: str) -> str:
     s = unicodedata.normalize("NFKD", s or "")
     s = "".join(c for c in s if not unicodedata.combining(c)).lower()
@@ -420,9 +431,8 @@ def clean(rows: list[dict], toks: list[Counter], *, display: str, gkey: str,
         if "holds two songs" in s.flags:
             s.reason = "medley of songs listed separately"
             continue
-        parts = [p for p in re.split(r"\s+/\s+|\s*/\s*(?=[A-Z])|\s+[xX]\s+|\s+vs\.?\s+", s.title) if p.strip()]
-        if len(parts) > 1 and sum(title_key(p, artist_words) in keys_here for p in parts) >= 1 \
-                and all(len(_alnum_squash(p)) >= 3 for p in parts):
+        # "Teddy Bear / Don't Be Cruel": most uploads name songs listed on their own
+        if 2 * sum(_names_listed_songs(t, s.key, keys_here, artist_words) for t in raw) >= len(raw):
             s.reason = "medley of songs listed separately"
             continue
         # a remix the artist is credited for: somebody else's words
