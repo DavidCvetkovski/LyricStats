@@ -18,3 +18,15 @@ uv.lock
 *.db
 .tmp/
 .git/
+# Never upload local credentials (the project's own environment holds what the
+# API needs), and nothing the API does not import: the offline pipeline, its
+# outputs and working files.
+.env*
+output/
+scripts/
+tools/
+scratch/
+tmp/
+docs/
+infra/
+*.log
