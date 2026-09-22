@@ -342,6 +342,11 @@ def fold_all(workers: int, chunks: int, only: list[str] | None = None) -> None:
         gkeys = sorted((k for k in keys if rows_of.get(k, 0) >= MIN_SONGS), key=lambda k: -rows_of[k])
     own.close()
     print(f"{len(gkeys):,} artists to fold", flush=True)
+    tok_path = os.path.join(ROOT, "data", "lrclib", "_artist_tok_clean.db")
+    if not only:  # a full fold rebuilds both: free their 2 GB before the parts fill the disk
+        for path in (STAGE_DB, tok_path):
+            if os.path.exists(path):
+                os.remove(path)
     os.makedirs(PART_DIR, exist_ok=True)
     jobs = [(k, gkeys[k::chunks]) for k in range(chunks)]  # the big ones spread over all chunks
     t0 = time.time()
@@ -367,9 +372,6 @@ def fold_all(workers: int, chunks: int, only: list[str] | None = None) -> None:
         st.commit()
     st.execute("CREATE TABLE IF NOT EXISTS agg (gkey TEXT PRIMARY KEY, display TEXT, stats_json TEXT, "
                "songs_json TEXT)")
-    tok_path = os.path.join(ROOT, "data", "lrclib", "_artist_tok_clean.db")
-    if not only and os.path.exists(tok_path):
-        os.remove(tok_path)
     tk = sqlite3.connect(tok_path)
     tk.execute("PRAGMA journal_mode=OFF")
     tk.execute("CREATE TABLE IF NOT EXISTS artist_tok (name TEXT PRIMARY KEY, toks TEXT)")
