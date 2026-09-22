@@ -1,7 +1,8 @@
-"""Compact review text for top artists: python compact.py START END"""
+"""Compact review text for top artists: python compact.py START END [BUDGET]
+(TOP_TSV picks the ranked list, default output/review/top.tsv)"""
 import sqlite3, sys, json
 import os; st = sqlite3.connect(os.environ.get("REPORT_DB", "data/lrclib/_clean_agg.db"))
-top = [l.rstrip("\n").split("\t") for l in open("output/review/top.tsv")]
+top = [l.rstrip("\n").split("\t")[:4] for l in open(os.environ.get("TOP_TSV", "output/review/top.tsv"))]
 lo, hi = int(sys.argv[1]), int(sys.argv[2])
 budget = int(sys.argv[3]) if len(sys.argv) > 3 else 27000
 used = 0
