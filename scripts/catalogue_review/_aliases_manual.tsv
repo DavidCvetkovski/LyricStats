@@ -1,0 +1,13 @@
+# alias<TAB>canonical: names the first importer split out of a duo credit
+# ("Simon & Garfunkel" was filed under "Simon" and under "Garfunkel").
+garfunkel	simonandgarfunkel
+simongarfunkel	simonandgarfunkel
+kool	koolandthegang
+koolthegang	koolandthegang
+fireearth	earthwindandfire
+earthwindfire	earthwindandfire
+darylhall	darylhallandjohnoates
+darylhalljohnoates	darylhallandjohnoates
+hallandoates	darylhallandjohnoates
+hall	darylhallandjohnoates
+halloates	darylhallandjohnoates

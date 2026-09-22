@@ -381,6 +381,33 @@ OWNER_DB = ROOT / "data" / "lrclib" / "_fp_owner.db"
 _owner: sqlite3.Connection | None = None
 
 
+_alias_map: dict[str, str] | None = None
+
+
+def alias_group(gkey: str) -> set[str]:
+    """The key and the other names folded into it by the catalogue cleaning
+    (data/lrclib/_aliases.json and scripts/catalogue_review/_aliases_manual.tsv)."""
+    global _alias_map
+    if _alias_map is None:
+        _alias_map = {}
+        auto = ROOT / "data" / "lrclib" / "_aliases.json"
+        if auto.exists():
+            _alias_map.update(json.loads(auto.read_text(encoding="utf-8")))
+        manual = ROOT / "scripts" / "catalogue_review" / "_aliases_manual.tsv"
+        if manual.exists():
+            for line in manual.read_text(encoding="utf-8").splitlines():
+                if line.strip() and not line.startswith("#"):
+                    alias, canonical = line.split("\t")[:2]
+                    _alias_map[alias.strip()] = canonical.strip()
+        for a in list(_alias_map):  # follow chains to their end
+            c, seen = _alias_map[a], {a}
+            while c in _alias_map and c not in seen:
+                seen.add(c)
+                c = _alias_map[c]
+            _alias_map[a] = c
+    return {gkey} | {a for a, c in _alias_map.items() if c == gkey}
+
+
 def fetch_rows(song: sqlite3.Connection, name: str, gkey: str) -> SongRows:
     """The artist's uploads: every uploaded spelling of the name that folds to
     their key (scripts/build_owner_index.py's akey_map, the grouping the
@@ -389,7 +416,8 @@ def fetch_rows(song: sqlite3.Connection, name: str, gkey: str) -> SongRows:
     if _owner is None and OWNER_DB.exists():
         _owner = sqlite3.connect(f"file:{OWNER_DB}?mode=ro", uri=True)
     if _owner is not None:
-        akeys = [a for (a,) in _owner.execute("SELECT akey FROM akey_map WHERE gkey = ?", (gkey,))]
+        akeys = [a for g in sorted(alias_group(gkey))
+                 for (a,) in _owner.execute("SELECT akey FROM akey_map WHERE gkey = ?", (g,))]
         if akeys:
             rows = []
             for i in range(0, len(akeys), 500):

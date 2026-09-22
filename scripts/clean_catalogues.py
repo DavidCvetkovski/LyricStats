@@ -120,8 +120,10 @@ def fold_one(song: sqlite3.Connection, gkey: str, review: dict | None, *, report
             f"SELECT * FROM song_stat WHERE akey IN ({','.join('?' * len(part))})", part)]
     if len(rows) < MIN_SONGS:
         return None
-    def owners_here(fp):  # the artist's other names are not other artists
-        return [o for o in owners(fp) if o[0] not in group]
+    skip = group | removed_keys()
+
+    def owners_here(fp):  # the artist's other names, and removed pages, are not other artists
+        return [o for o in owners(fp) if o[0] not in skip]
 
     return fold_artist(rows, min_songs=MIN_SONGS, owners=owners_here,
                        artist_uploads=artist_uploads, review=review,
@@ -231,6 +233,11 @@ def build_aliases(min_overlap: float = 0.25) -> dict:
     return out
 
 
+# Hand-made aliases: credits the first importer split in two ("Simon &
+# Garfunkel" filed under "Simon" and under "Garfunkel"), folded into the duo.
+MANUAL_ALIAS_PATH = os.path.join(REVIEW_DIR, "_aliases_manual.tsv")
+
+
 def aliases() -> dict[str, str]:
     global _aliases
     if _aliases is None:
@@ -238,7 +245,32 @@ def aliases() -> dict[str, str]:
         if os.path.exists(ALIAS_PATH):
             with open(ALIAS_PATH, encoding="utf-8") as fh:
                 _aliases = json.load(fh)
+        if os.path.exists(MANUAL_ALIAS_PATH):
+            with open(MANUAL_ALIAS_PATH, encoding="utf-8") as fh:
+                for line in fh:
+                    if line.strip() and not line.startswith("#"):
+                        alias, canonical = line.rstrip("\n").split("\t")[:2]
+                        _aliases[alias.strip()] = canonical.strip()
+        # follow chains to their end: "garfunkelsimon" → "simongarfunkel" → "simonandgarfunkel"
+        for a in list(_aliases):
+            c, seen = _aliases[a], {a}
+            while c in _aliases and c not in seen:
+                seen.add(c)
+                c = _aliases[c]
+            _aliases[a] = c
     return _aliases
+
+
+_removed: set[str] | None = None
+
+
+def removed_keys() -> set[str]:
+    """Pages a review removes: halves of a split credit, audio dramas. They
+    hold no songs of their own, so they claim none from anyone else."""
+    global _removed
+    if _removed is None:
+        _removed = {g for g, r in load_reviews().items() if r.get("remove")}
+    return _removed
 
 
 def alias_group(gkey: str) -> set[str]:
@@ -302,8 +334,11 @@ def fold_all(workers: int, chunks: int, only: list[str] | None = None) -> None:
         keys = {k for (k,) in app.execute("SELECT name_key FROM artistaggregate WHERE song_count >= 25")}
         app.close()
         rows_of = dict(own.execute("SELECT gkey, rows FROM artist"))
-        al = build_aliases()
-        keys = {al.get(k, k) for k in keys}
+        build_aliases()
+        global _aliases
+        _aliases = None  # reload: the new automatic aliases and the hand-made ones
+        al = aliases()
+        keys = {al.get(k, k) for k in keys} - removed_keys()
         gkeys = sorted((k for k in keys if rows_of.get(k, 0) >= MIN_SONGS), key=lambda k: -rows_of[k])
     own.close()
     print(f"{len(gkeys):,} artists to fold", flush=True)
@@ -471,8 +506,8 @@ def commit() -> None:
     rows = []
     used: set[str] = set()
     for g, display, stats_json, songs_json in st.execute("SELECT gkey, display, stats_json, songs_json FROM agg"):
-        if g in stubs:
-            continue
+        if g in stubs or g in aliases() or g in removed_keys():
+            continue  # folded into another page, or not a page at all
         count = json.loads(stats_json)["song_count"]
         for name, disp in names.get(g, [(display.strip().lower(), display)]):
             if name in used:
