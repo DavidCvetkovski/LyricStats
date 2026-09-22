@@ -59,14 +59,19 @@ MASH_RE = re.compile(r"\b(?:megamix|mega[- \u2010]mix|medley|mash-?up|megamashup
 SKIT_RE = re.compile(r"\bskit\b", re.I)
 INTERLUDE_RE = re.compile(r"\binterlude\b", re.I)
 INTERLUDE_MAX_WORDS = 100
+# Title unions skip rows whose words are mostly uploaded under another title.
+KEY_UNION_GUARD = True
+# A text holding two unlike songs is a medley and merges with neither.
+MEDLEY_GUARD = True
 # Words that make a bracket or dash clause a version of a song.
 VERSION_WORD_RE = re.compile(
     r"\b(?:remix(?:ed)?|mix|edit|rework|bootleg|dub|version|flip|refix|vip|remode|"
     r"re-?edit|cover|live|acoustic|instrumental|a ?capp?ella|sped up|slowed|"
-    r"demo|snippet|teaser|preview)\b",
+    r"demo|snippet|teaser|preview|remaster(?:ed)?|mono|stereo)\b",
     re.I,
 )
-CLAUSE_RE = re.compile(r"[(\[{][^)\]}]*[)\]}]")
+# a bracket clause, or one cut off by a truncated title: "A Kind Of Magic (Demo"
+CLAUSE_RE = re.compile(r"[(\[{][^)\]}]*(?:[)\]}]|$)")
 NON_SONG_RE = re.compile(
     r"\b(?:voice[- ]?over|voice memo|interview|commentary|track by track|message from|"
     r"radio promo|spoken intro|audio book|audiobook|chapter \d|kapitel \d|"
@@ -301,12 +306,21 @@ def clean(rows: list[dict], toks: list[Counter], *, display: str, gkey: str,
         fps.append(fp_of[id(c)])
     keys = [title_key(r["title"], artist_words) for r in rows]
 
+    # A transcription uploaded mostly under another title is that song's, and
+    # joins it by its words, not by its own title: one "Underneath the Sky"
+    # carrying the words of "Step Out" must not make the two songs one.
+    fp_keys: dict[tuple, Counter] = defaultdict(Counter)
+    for i in range(n):
+        if fps[i]:
+            fp_keys[fps[i]][keys[i]] += 1
     uf = UnionFind(n)
     first_key: dict[str, int] = {}
     first_fp: dict[tuple, int] = {}
     for i in range(n):
         k = keys[i]
-        if k and len(k) >= 3 and k != artist_words:
+        stray = KEY_UNION_GUARD and fps[i] and fp_keys[fps[i]].most_common(1)[0][0] != k \
+            and fp_keys[fps[i]][k] * 2 < sum(fp_keys[fps[i]].values())
+        if k and len(k) >= 3 and k != artist_words and not stray:
             if k in first_key:
                 uf.union(i, first_key[k])
             else:
@@ -334,30 +348,59 @@ def clean(rows: list[dict], toks: list[Counter], *, display: str, gkey: str,
         top = sorted(v, key=lambda w: (-v[w], df[w]))[:6]
         for w in top:
             posting[w].append(root)
-    uf2 = UnionFind(n)
+    # A text that holds another nearly whole is the same song (a re-transcription,
+    # an extended take), unless it holds two songs unlike each other: then it is
+    # a medley ("Brain Damage / Eclipse") and must not make them one.
+    size = {root: sum(v.values()) for root, v in vec.items()}
+    holds: dict[int, dict[int, float]] = defaultdict(dict)
     for w, roots in posting.items():
         if len(roots) < 2 or len(roots) > 300:
             continue
         for a_i in range(len(roots)):
             a = roots[a_i]
-            if sum(vec[a].values()) < 25:
+            if size[a] < 25:
                 continue
             for b in roots[a_i + 1:]:
-                if uf2.find(a) == uf2.find(b) or sum(vec[b].values()) < 25:
+                if size[b] < 25 or b in holds[a] or a in holds[b]:
                     continue
-                if containment(vec[a], vec[b]) >= 0.85:
-                    uf2.union(a, b)
+                c = containment(vec[a], vec[b])
+                if c >= 0.85:
+                    big, small = (a, b) if size[a] >= size[b] else (b, a)
+                    holds[big][small] = c
+    # A text much longer than what it holds may be a medley whose top words all
+    # come from one of its songs: look for the other among every text sharing a word.
+    for big in list(holds):
+        if not MEDLEY_GUARD or not holds[big] or size[big] < 1.4 * min(size[p] for p in holds[big]):
+            continue
+        cands = {r for w in vec[big] for r in posting.get(w, ())}
+        for c_ in cands:
+            if c_ != big and c_ not in holds[big] and 25 <= size[c_] <= size[big] \
+                    and containment(vec[big], vec[c_]) >= 0.85:
+                holds[big][c_] = 1.0
+    uf2 = UnionFind(n)
+    medleys: set[int] = set()
+    for big, parts in holds.items():
+        ps = list(parts)
+        if MEDLEY_GUARD and any(containment(vec[p], vec[q]) < 0.5 for i, p in enumerate(ps) for q in ps[i + 1:]):
+            medleys.add(big)
+            continue
+        for p in ps:
+            uf2.union(big, p)
     merged: dict[int, list[int]] = defaultdict(list)
+    parts_of: dict[int, list[int]] = defaultdict(list)
     for root, idx in groups.items():
         merged[uf2.find(root)].extend(idx)
+        parts_of[uf2.find(root)].append(root)
 
     songs: list[Song] = []
-    for idx in merged.values():
+    for m, idx in merged.items():
         rep = _representative(rows, idx)
         title = _best_title(rows, idx, artist_words)
         fp_counts = Counter(fps[i] for i in idx if fps[i])
         songs.append(Song(rows=idx, rep=rep, title=title, key=title_key(title, artist_words),
                           uploads=len(idx), fp=fp_counts.most_common(1)[0][0] if fp_counts else None))
+        if all(r in medleys for r in parts_of[m]):
+            songs[-1].flags.append("holds two songs")
 
     keys_here = {s.key for s in songs}
     for s in songs:
@@ -365,6 +408,9 @@ def clean(rows: list[dict], toks: list[Counter], *, display: str, gkey: str,
         # medleys, megamixes, mash-ups
         if all(MASH_RE.search(t) for t in raw):
             s.reason = "medley or megamix"
+            continue
+        if "holds two songs" in s.flags:
+            s.reason = "medley of songs listed separately"
             continue
         parts = [p for p in re.split(r"\s+/\s+|\s*/\s*(?=[A-Z])|\s+[xX]\s+|\s+vs\.?\s+", s.title) if p.strip()]
         if len(parts) > 1 and sum(title_key(p, artist_words) in keys_here for p in parts) >= 1 \

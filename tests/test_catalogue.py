@@ -160,3 +160,15 @@ def test_a_review_renames_a_song_shown_under_a_wrong_title():
     songs = clean(rows, toks, display="Enrique Iglesias", gkey="enriqueiglesias",
                   review={"rename": {"Enrique Iglesias": "Miente"}})
     assert _kept(songs) == ["Hero", "Miente"]
+
+
+def test_one_mislabelled_upload_or_a_medley_does_not_make_two_songs_one():
+    rows, toks = _rows([
+        ("Step Out", SONG_A * 3, 40, 290), ("Underneath the Sky", SONG_B * 3, 30, 190),
+        ("Underneath the Sky", SONG_A * 3, 1, 290),  # the words of Step Out, mislabelled
+        ("Brain Damage", SONG_C * 3, 20, 180),
+        ("Brain Damage / Underneath the Sky", (SONG_C + SONG_B) * 3, 2, 370),  # a medley of both
+    ], artist="Oasis")
+    songs = {s.title: s.reason for s in clean(rows, toks, display="Oasis", gkey="oasis")}
+    assert songs["Step Out"] is None and songs["Underneath the Sky"] is None and songs["Brain Damage"] is None
+    assert songs["Brain Damage / Underneath the Sky"] == "medley of songs listed separately"
