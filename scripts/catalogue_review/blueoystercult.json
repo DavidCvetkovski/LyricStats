@@ -7,5 +7,11 @@
   "If I Feel": "second copy of If I Fell",
   "ODd On Life Itself Live": "live copy"
  },
- "keep": []
+ "keep": [],
+ "rename": {
+  "What Is Quicksand / Bonus Track": "What Is Quicksand",
+  "Betty Lou's Got A New Pair Of Shoes / Bonus Track": "Betty Lou's Got A New Pair Of Shoes",
+  "Dial M For Murder / Bonus Track": "Dial M For Murder",
+  "I Want You (She's So Heavy) / Live": "I Want You (She's So Heavy)"
+ }
 }
