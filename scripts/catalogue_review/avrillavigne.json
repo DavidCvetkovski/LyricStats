@@ -1,0 +1,13 @@
+{
+ "artist": "Avril Lavigne",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Lean on Me - ArtistsCAN": "ArtistsCAN",
+  "Tik Tok": "Kesha's song",
+  "Hello": "Adele's song"
+ },
+ "keep": [
+  "Bad Reputation",
+  "Imagine"
+ ]
+}
