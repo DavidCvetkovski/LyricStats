@@ -1,0 +1,34 @@
+{
+ "artist": "Barry Manilow",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Mandy - Barry Manilow": "second copy of Mandy",
+  "O Tannenbaum Winter Wonderland": "medley"
+ },
+ "keep": [
+  "California Dreamin'",
+  "I'll Be Home For Christmas",
+  "What The World Needs Now Is Love",
+  "And I Love Her",
+  "Arthur's Theme",
+  "Bluer Than Blue",
+  "I Just Called To Say I Love You",
+  "I've Got The World On A String",
+  "In The Wee Small Hours Of The Morning",
+  "Love Me Tender",
+  "Nevertheless",
+  "Open Arms",
+  "Right Here Waiting",
+  "The Air That I Breathe",
+  "When I Need You",
+  "Yesterday",
+  "You've Lost That Lovin' Feelin'",
+  "How Deep Is The Ocean?",
+  "I Fall in Love Too Easily",
+  "It Could Happen To You"
+ ],
+ "rename": {
+  "Let's Take Some Time to Say G": "Let's Take Some Time to Say Goodbye",
+  "Let's Take All Night (To Say": "Let's Take All Night (To Say Goodbye)"
+ }
+}
