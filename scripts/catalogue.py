@@ -1,0 +1,422 @@
+"""One artist's LRCLIB uploads → the songs that are theirs, one version each.
+
+LRCLIB lists every upload of every release under whatever artist name the
+uploader typed. The importer used to group those uploads by title or lyrics
+and keep the longest, which let extended mixes and megamixes stand in for the
+songs ("Bad" at 1,147 words), let medleys and typo'd copies count as songs of
+their own, and left in songs that were only filed under the artist: a group's
+hits under a member's name, a remixer's remix of somebody else's song, a
+stray upload that belongs to another artist.
+
+clean() works on the rows of one artist:
+
+  1. group the uploads of one song: the same title once track numbers, years,
+     artist credits and version words are stripped; the same lyric
+     fingerprint; or nearly the same words (one text contained in the other);
+  2. stand each song for its most-uploaded transcription (the studio
+     recording is on every compilation; an extended mix is on one), named by
+     its most common plain title;
+  3. set aside what is not the artist's song: medleys, megamixes and
+     mash-ups; remixes the artist is credited for (somebody else's words);
+     non-songs; and a song uploaded here once or twice that lives elsewhere
+     (ownership, from scripts/build_owner_index.py);
+  4. apply the hand review (scripts/catalogue_review/*.json) for the artists
+     that have one: songs to drop, songs to keep, or the whole list.
+
+Every decision is reported with its reason, for the review sheets.
+"""
+
+from __future__ import annotations
+
+import re
+import unicodedata
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
+from functools import lru_cache
+
+from import_lrclib import _alnum_squash, canonical_title, content_fingerprint
+from lyricstats.stats import STOPWORDS
+
+# ── titles ───────────────────────────────────────────────────────────────────
+
+# "01 ", "01. ", "1 - ", "1-01 ", "B2 ", "175.", "06-": a track or side number
+# in front of the title. "7 Rings", "99 Problems" and "22" are titles.
+TRACK_NO_RE = re.compile(
+    r"^\s*(?:"
+    r"0\d{1,2}\s*[-._)]?\s*"            # 01 / 01. / 01 -
+    r"|\d{1,3}\s*[-._)]\s*(?:\d{1,2}\s*[-._)]?\s*)?"  # 1 - / 1-01 / 175.
+    r"|[A-Da-d]\d{1,2}\s*[-._)]?\s+"      # B2 (vinyl side)
+    r")(?=\S)"
+)
+# Download-site and upload junk glued to titles.
+TITLE_JUNK_RE = re.compile(
+    r"\s*[-–|]?\s*(?:spotubedl\.com|spotifydown\.com|y2mate\.com|www\.\S+|\S+\.(?:com|net|org))\s*$",
+    re.I,
+)
+TRAILING_YEAR_RE = re.compile(r"\s+(?:19|20)\d{2}$")
+MASH_RE = re.compile(r"\b(?:megamix|mega mix|medley|mash-?up|megamashup)\b", re.I)
+# Words that make a bracket or dash clause a version of a song.
+VERSION_WORD_RE = re.compile(
+    r"\b(?:remix(?:ed)?|mix|edit|rework|bootleg|dub|version|flip|refix|vip|remode|"
+    r"re-?edit|cover|live|acoustic|instrumental|a ?capp?ella|sped up|slowed|"
+    r"demo|snippet|teaser|preview)\b",
+    re.I,
+)
+CLAUSE_RE = re.compile(r"[(\[{][^)\]}]*[)\]}]")
+NON_SONG_RE = re.compile(
+    r"\b(?:voice[- ]?over|voice memo|interview|commentary|track by track|message from|"
+    r"radio promo|spoken intro|audio book|audiobook|chapter \d|kapitel \d|"
+    r"behind the scenes|making of|album preview|phone call with|phone conversation|"
+    r"press conference|acceptance speech|liner notes|tracklist|full album)\b",
+    re.I,
+)
+# A clause that credits a remixer ("(Avicii Remix)", "- Alec Empire Mix"); a
+# "(Taylor's Version)" or "(Live)" is the artist's own recording, not a remix.
+REMIX_WORD_RE = re.compile(r"\b(?:remix(?:ed)?|mix|edit|rework|bootleg|dub|flip|refix|vip|re-?edit)\b", re.I)
+# Artists that are not one artist: compilations, placeholders, cover mills.
+PSEUDO_ARTIST_RE = re.compile(
+    r"^(?:various.*|va|v\.a\.|v a|aa\.? ?vv\.?|diverse.*|verschiedene.*|varios.*|"
+    r"v[aá]rios.*|vari|autori vari|artistes? divers|compilation.*|unknown.*|"
+    r"artist|artists|song|songs|the|a|y|e|x|n/a|none|null|undefined|"
+    r"kidz bop.*|glee cast|karaoke.*|sing king.*|the hit crew.*|party hits.*|"
+    r"mr\.? entertainer.*|ameritz.*|hit masters.*|starlite.*|.*tribute.*|"
+    r".*cover band.*|.*covers?\b.*|.*orchestra$)$",
+    re.I,
+)
+
+
+def plain(s: str) -> str:
+    s = unicodedata.normalize("NFKC", s or "").replace("_", " ")
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def strip_track_no(title: str) -> str:
+    t = TRACK_NO_RE.sub("", title, count=1)
+    return t if len(t) >= 2 else title
+
+
+def strip_artist(title: str, artist_words: str) -> str:
+    """Drop the artist's own name glued in front: "Michael Jackson - Bad",
+    "michael jackson billie jean", "Quincy Jones_…" is left for ownership."""
+    if not artist_words:
+        return title
+    n = len(artist_words.split())
+    words = re.split(r"(\s*[-–:|]\s*|\s+)", title.strip())
+    # words alternates [word, sep, word, sep, ...]; the credit is the first n words
+    if len(words) > 2 * n and _alnum_squash("".join(words[:2 * n - 1])) == artist_words \
+            and re.fullmatch(r"\s*[-–:|]\s*", words[2 * n - 1]):
+        rest = "".join(words[2 * n:]).strip()
+        if rest:
+            return rest
+    return title
+
+
+@lru_cache(maxsize=400_000)
+def title_key(title: str, artist_words: str) -> str:
+    """The key a song's uploads share: no track number, credit, year or version."""
+    t = plain(title)
+    t = TITLE_JUNK_RE.sub("", t)
+    t = strip_track_no(t)
+    t = strip_artist(t, artist_words)
+    k = canonical_title(t, None)
+    k2 = TRAILING_YEAR_RE.sub("", k)
+    return k2 if len(k2) >= 3 else k
+
+
+@lru_cache(maxsize=400_000)
+def version_clauses(title: str) -> tuple[str, ...]:
+    out = [m.group(0) for m in CLAUSE_RE.finditer(title) if VERSION_WORD_RE.search(m.group(0))]
+    parts = re.split(r"\s[-–—]\s", title)
+    if len(parts) > 1 and VERSION_WORD_RE.search(parts[-1]):
+        out.append(parts[-1])
+    return tuple(out)
+
+
+@lru_cache(maxsize=400_000)
+def is_plain_title(title: str) -> bool:
+    """A title with no version clause and no junk: how the song is usually named."""
+    t = plain(title)
+    return not version_clauses(t) and not TITLE_JUNK_RE.search(t) and not MASH_RE.search(t)
+
+
+@lru_cache(maxsize=400_000)
+def display_title(title: str, artist_words: str) -> str:
+    t = plain(title)
+    t = TITLE_JUNK_RE.sub("", t)
+    t = strip_track_no(t)
+    t = strip_artist(t, artist_words)
+    for c in version_clauses(t):
+        t = t.replace(c, "")
+    t = re.sub(r"\s*[-–—]\s*$", "", t)
+    t = re.sub(r"\s{2,}", " ", t).strip(" -–")
+    return t or plain(title)
+
+
+# ── lyrics ───────────────────────────────────────────────────────────────────
+
+
+def content(cnt: Counter) -> Counter:
+    return Counter({w: c for w, c in cnt.items() if len(w) > 2 and w not in STOPWORDS})
+
+
+def containment(a: Counter, b: Counter) -> float:
+    """How much of the smaller text is in the other (weighted by counts)."""
+    sa, sb = sum(a.values()), sum(b.values())
+    if not sa or not sb:
+        return 0.0
+    small, big = (a, b) if sa <= sb else (b, a)
+    return sum(min(c, big.get(w, 0)) for w, c in small.items()) / min(sa, sb)
+
+
+# ── the pass ─────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class Song:
+    rows: list[int]                  # indices into the artist's rows
+    rep: int                         # the row that stands for the song
+    title: str                       # display title
+    key: str
+    uploads: int
+    fp: tuple | None = None
+    reason: str | None = None        # why it was set aside (None = kept)
+    owner: tuple[str, int, str] | None = None   # (gkey, uploads, title) elsewhere
+    flags: list[str] = field(default_factory=list)
+
+
+class UnionFind:
+    def __init__(self, n: int):
+        self.p = list(range(n))
+
+    def find(self, x: int) -> int:
+        while self.p[x] != x:
+            self.p[x] = self.p[self.p[x]]
+            x = self.p[x]
+        return x
+
+    def union(self, a: int, b: int) -> None:
+        ra, rb = self.find(a), self.find(b)
+        if ra != rb:
+            self.p[ra] = rb
+
+
+def _representative(rows: list[dict], idx: list[int]) -> int:
+    """The most-uploaded transcription among the plainly titled uploads."""
+    pool = [i for i in idx if is_plain_title(rows[i]["title"])] or idx
+    by_wc: dict[int, list[int]] = defaultdict(list)
+    for i in pool:
+        by_wc[rows[i]["wc"]].append(i)
+    wcs = sorted(rows[i]["wc"] for i in pool)
+    median = wcs[len(wcs) // 2]
+    best_wc = max(by_wc, key=lambda w: (len(by_wc[w]), any(rows[i]["has_synced"] for i in by_wc[w]),
+                                        -abs(w - median)))
+    return max(by_wc[best_wc], key=lambda i: rows[i]["has_synced"])
+
+
+def _best_title(rows: list[dict], idx: list[int], artist_words: str) -> str:
+    cands = [display_title(rows[i]["title"], artist_words) for i in idx if is_plain_title(rows[i]["title"])]
+    if not cands:
+        cands = [display_title(rows[i]["title"], artist_words) for i in idx]
+    freq = Counter(c for c in cands if len(_alnum_squash(c)) >= 1)
+    if not freq:
+        return plain(rows[idx[0]]["title"])
+
+    def score(t: str) -> tuple:
+        shouting = t.isupper() and len(t) > 4
+        camel = bool(re.search(r"[a-z][A-Z]", t))
+        return (freq[t], not shouting, not camel, -len(t))
+
+    return max(freq, key=score)
+
+
+def _key(s: str) -> str:
+    s = unicodedata.normalize("NFKD", s or "")
+    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
+    return "".join(c for c in s if c.isalnum())
+
+
+NOT_A_CREDIT_RE = re.compile(
+    r"\b(?:feat|ft|featuring|with|prod|produced|remix|mix|version|live|edit|demo|from|of|by|"
+    r"theme|part|pt|vol|take|session|reprise|intro|outro|interlude)\b", re.I)
+
+
+def other_artist_named(title: str, gkey: str, artist_uploads, song_owners: set[str]) -> str | None:
+    """Another artist credited in the title: "Culture Club / Time", "Seu Jorge -
+    Queen Bitch", "Sad But True (Metallica)". The name must belong to an
+    artist who holds this song's lyrics too."""
+    t = plain(title)
+    cands: list[str] = []
+    m = re.match(r"^(.+?)\s*(?:\s/\s|/(?=\S)|\s[-–—]\s|_|:\s)\s*(.+)$", t)
+    if m:
+        cands.append(m.group(1))
+    m = re.search(r"\s[-–—]\s([^-–—]+)$", t)
+    if m:
+        cands.append(m.group(1))
+    for c in CLAUSE_RE.findall(t):
+        inner = c[1:-1]
+        if not NOT_A_CREDIT_RE.search(inner):
+            cands.append(inner)
+    for c in cands:
+        for part in re.split(r"\s*(?:,|&|\+|\band\b|\bx\b|\bvs\.?)\s*", c, flags=re.I):
+            k = _key(part)
+            if len(k) < 4 or k == gkey or gkey in k or k in gkey:
+                continue
+            # the named artist must hold this song's lyrics too: "(Nightmare)"
+            # in "Alive (Nightmare)" is a subtitle, not the band Nightmare
+            if k in song_owners and artist_uploads(k) >= 20:
+                return part.strip()
+    return None
+
+
+def _is_pseudo(gkey_or_name: str) -> bool:
+    return bool(PSEUDO_ARTIST_RE.match((gkey_or_name or "").strip()))
+
+
+def clean(rows: list[dict], toks: list[Counter], *, display: str, gkey: str,
+          owners=None, artist_uploads=None, review: dict | None = None) -> list[Song]:
+    """Group, choose and filter one artist's rows. `owners(fp)` returns
+    [(gkey, uploads, title)] for the lyrics fingerprint across the archive;
+    `artist_uploads(gkey)` how many uploads an artist key has."""
+    artist_words = _alnum_squash(display)
+    own_words = {w for w in artist_words.split() if len(w) >= 3 and w not in STOPWORDS
+                 and not VERSION_WORD_RE.fullmatch(w)}
+    n = len(rows)
+    fp_of: dict[int, tuple | None] = {}
+    fps = []
+    for c in toks:  # uploads of one transcription share one Counter
+        if id(c) not in fp_of:
+            fp_of[id(c)] = content_fingerprint(c)
+        fps.append(fp_of[id(c)])
+    keys = [title_key(r["title"], artist_words) for r in rows]
+
+    uf = UnionFind(n)
+    first_key: dict[str, int] = {}
+    first_fp: dict[tuple, int] = {}
+    for i in range(n):
+        k = keys[i]
+        if k and len(k) >= 3 and k != artist_words:
+            if k in first_key:
+                uf.union(i, first_key[k])
+            else:
+                first_key[k] = i
+        if fps[i]:
+            if fps[i] in first_fp:
+                uf.union(i, first_fp[fps[i]])
+            else:
+                first_fp[fps[i]] = i
+
+    groups: dict[int, list[int]] = defaultdict(list)
+    for i in range(n):
+        groups[uf.find(i)].append(i)
+
+    # Nearly the same words under different titles and fingerprints: a
+    # re-transcription, a typo'd copy, an extended take. Compare each song's
+    # most-uploaded text with others sharing its rarest top words.
+    reps = {root: _representative(rows, idx) for root, idx in groups.items()}
+    vec = {root: content(toks[r]) for root, r in reps.items()}
+    df = Counter()
+    for v in vec.values():
+        df.update(v.keys())
+    posting: dict[str, list[int]] = defaultdict(list)
+    for root, v in vec.items():
+        top = sorted(v, key=lambda w: (-v[w], df[w]))[:6]
+        for w in top:
+            posting[w].append(root)
+    uf2 = UnionFind(n)
+    for w, roots in posting.items():
+        if len(roots) < 2 or len(roots) > 300:
+            continue
+        for a_i in range(len(roots)):
+            a = roots[a_i]
+            if sum(vec[a].values()) < 25:
+                continue
+            for b in roots[a_i + 1:]:
+                if uf2.find(a) == uf2.find(b) or sum(vec[b].values()) < 25:
+                    continue
+                if containment(vec[a], vec[b]) >= 0.85:
+                    uf2.union(a, b)
+    merged: dict[int, list[int]] = defaultdict(list)
+    for root, idx in groups.items():
+        merged[uf2.find(root)].extend(idx)
+
+    songs: list[Song] = []
+    for idx in merged.values():
+        rep = _representative(rows, idx)
+        title = _best_title(rows, idx, artist_words)
+        fp_counts = Counter(fps[i] for i in idx if fps[i])
+        songs.append(Song(rows=idx, rep=rep, title=title, key=title_key(title, artist_words),
+                          uploads=len(idx), fp=fp_counts.most_common(1)[0][0] if fp_counts else None))
+
+    keys_here = {s.key for s in songs}
+    for s in songs:
+        raw = [plain(rows[i]["title"]) for i in s.rows]
+        # medleys, megamixes, mash-ups
+        if all(MASH_RE.search(t) for t in raw):
+            s.reason = "medley or megamix"
+            continue
+        parts = [p for p in re.split(r"\s+/\s+|\s*/\s*(?=[A-Z])|\s+[xX]\s+|\s+vs\.?\s+", s.title) if p.strip()]
+        if len(parts) > 1 and sum(title_key(p, artist_words) in keys_here for p in parts) >= 1 \
+                and all(len(_alnum_squash(p)) >= 3 for p in parts):
+            s.reason = "medley of songs listed separately"
+            continue
+        # a remix the artist is credited for: somebody else's words
+        own_remix = [t for t in raw if any(REMIX_WORD_RE.search(c) and own_words & set(_alnum_squash(c).split())
+                                           for c in version_clauses(t))]
+        if own_words and len(own_remix) == len(raw):
+            s.reason = "their remix of another artist's song"
+            continue
+        if all(NON_SONG_RE.search(t) for t in raw):
+            s.reason = "not a song"
+            continue
+        if re.search(r"\bvs\.?\s", s.title, re.I) and any(w in _alnum_squash(s.title).split() for w in own_words):
+            s.reason = "mash-up"
+            continue
+        song_owners = {g for g, _c, _t in owners(s.fp)} if owners is not None and s.fp else set()
+        if artist_uploads is not None:
+            credited = [other_artist_named(x, gkey, artist_uploads, song_owners) for x in raw]
+            named = [c for c in credited if c]
+            if named and len(named) * 2 > len(raw):
+                s.reason = f"credited to {Counter(named).most_common(1)[0][0]}"
+                continue
+        # uploaded here once or twice, at home elsewhere
+        if owners is not None and s.fp:
+            others = [(g, c, t) for g, c, t in owners(s.fp)
+                      if g != gkey and not _is_pseudo(g) and gkey not in g and g not in gkey]
+            if others:
+                g, c, t = max(others, key=lambda x: x[1])
+                s.owner = (g, c, t)
+                # most of its uploads name the other artist ("Broken Wings (Mr. Mister)"); one
+                # "Hurt (Nine Inch Nails cover)" among Johnny Cash's 337 does not make it theirs
+                named_here = len(g) >= 6 and 2 * sum(g in _alnum_squash(x).replace(" ", "") for x in raw) > len(raw)
+                names_us = gkey in _alnum_squash(t).replace(" ", "")
+                feat_here = any(re.search(r"\b(feat|ft|featuring|with)\b", x, re.I) for x in raw)
+                if not names_us and not feat_here:
+                    if ((s.uploads <= 2 and c >= max(5, 5 * s.uploads))
+                            or (s.uploads <= 5 and c >= 10 * s.uploads)
+                            or (named_here and c >= s.uploads)):
+                        s.reason = "belongs to another artist"
+                    elif c >= 2 * s.uploads:
+                        s.flags.append("more uploads elsewhere")
+
+    if review:
+        _apply_review(songs, review, artist_words)
+    return songs
+
+
+def _apply_review(songs: list[Song], review: dict, artist_words: str) -> None:
+    """Hand decisions win. A review holds "drop" ({title: why}), "keep"
+    ([title], restoring a song the rules set aside) and, for a catalogue
+    curated in full, "only" ([title]); titles match by their key."""
+    def k(t: str) -> str:
+        return title_key(t, artist_words)
+
+    only = {k(t) for t in review.get("only", [])}
+    drop = {k(t): why for t, why in (review.get("drop") or {}).items()}
+    keep = {k(t) for t in review.get("keep", [])}
+    for s in songs:
+        if only:
+            s.reason = None if s.key in only else "not in the reviewed list"
+        if s.key in drop:
+            s.reason = "reviewed: " + (drop[s.key] or "not theirs")
+        elif s.key in keep:
+            s.reason = None

@@ -103,49 +103,6 @@ def test_content_fingerprint_ignores_order_and_rare_words():
     assert imp.content_fingerprint(a) == imp.content_fingerprint(b)
 
 
-def _row(title, wc, toks, synced=0):
-    return {
-        "title": title,
-        "artist": "Taylor Swift",
-        "wc": wc,
-        "has_synced": synced,
-        "toks": "",
-    }, Counter(toks.split())
-
-
-def test_dedupe_merges_title_typo_via_content():
-    # Same lyrics, one title is a typo → must collapse to one song.
-    lyr = "you re on your own kid grew up fast"
-    rows, toks = [], []
-    for title in ["You're On Your Own Kid", "05 You're On Your Own Kid", "You Re Own Your Own Kid"]:
-        r, c = _row(title, 40, lyr)
-        rows.append(r)
-        toks.append(c)
-    keep = imp._dedupe_songs(rows, toks)
-    assert len(keep) == 1
-
-
-def test_dedupe_keeps_distinct_songs():
-    rows, toks = [], []
-    for title, lyr in [
-        ("Love Story", "romeo juliet baby marry castle"),
-        ("Bad Blood", "band aids bullet holes mad scars"),
-        ("Style", "midnights james dean daydream tshirt"),
-    ]:
-        r, c = _row(title, 40, lyr)
-        rows.append(r)
-        toks.append(c)
-    keep = imp._dedupe_songs(rows, toks)
-    assert len(keep) == 3
-
-
-def test_dedupe_prefers_synced_then_longest():
-    r1, c1 = _row("Karma", 100, "karma cat purring " * 10)
-    r2, c2 = _row("Karma", 120, "karma cat purring " * 12, synced=1)
-    keep = imp._dedupe_songs([r1, r2], [c1, c2])
-    assert keep == [1]  # synced wins
-
-
 def test_truncation_stub_dropped():
     aggs = [_agg("Beyoncé", 2067), _agg("beyonc", 52), _agg("Beyond", 898)]
     kept, n = imp.drop_truncation_stubs(aggs)
@@ -210,3 +167,13 @@ def test_backfill_years():
     assert songs_list[1][1] == 2014
     assert songs_list[2][1] is None
     assert stats["years_known"] == 2
+
+
+def test_outside_song_length_keeps_titles_the_genius_filters_dropped():
+    # LRCLIB uploads are audio tracks: a title word is no evidence of prose.
+    for title in ("XO Tour Llif3", "The Manuscript", "Halftime", "House Tour", "Karaoke",
+                  "Poem to a Horse", "Freedom of Speech", "Foreword", "Elephant"):
+        assert not imp.outside_song_length(title, 150)
+    assert imp.outside_song_length("Hidden Track", 12)
+    assert not imp.outside_song_length("Intro Skit", 12)  # interludes and skits may be short
+    assert imp.outside_song_length("Full Album Text", 5000)

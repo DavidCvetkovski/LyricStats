@@ -1,0 +1,19 @@
+{
+ "artist": "Lana Del Rey",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "The Happiest Girl in the Whole USA": "a live cover",
+  "You Must Love Me": "a cover",
+  "Good Old-Fashioned Lover Boy": "Queen",
+  "If I Die Young": "not hers",
+  "Mercedes McLaren SLR (feat. DELLAFUENTE)": "not hers",
+  "Live Or Die (2)": "a copy of Live Or Die",
+  "LA Who Am I To Love You - From The Audiobook “Violet Bent Backwards Over The Grass”": "a poem from her audiobook, not a song",
+  "Judah Smith Interlude": "a sermon by Judah Smith",
+  "Jon Batiste Interlude": "Jon Batiste"
+ },
+ "keep": [
+  "Lost at Sea",
+  "I’ll Be Home for Christmas (from The Kacey Musgraves Christmas Show)"
+ ]
+}

@@ -1,0 +1,20 @@
+{
+ "artist": "Ella Fitzgerald",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Introductions": "stage talk",
+  "Band Introductions": "stage talk",
+  "Imagin My Frustration": "a typo'd copy of Imagine My Frustration",
+  "Blues Skies": "a typo'd copy of Blue Skies",
+  "MacPherson Is Rehearsing": "a second copy of MacPherson Is Rehearsin' (To Swing)",
+  "Joe Williams's Blues": "a second copy of Joe William's Blues",
+  "Just a Lucky so and So": "a second copy of I'm Just A Lucky So And So",
+  "Bess, You Is My Woman Now - with Louis Armstrong": "a second copy of Bess, You Is My Woman Now",
+  "There’s a Boat That’s Leavin’ Soon for New York": "a second copy of There's A Boat Dat's Leavin' Soon For New York",
+  "Don't Cha Go Way Mad": "a second copy of Don'cha Go 'Way Mad",
+  "Lady Be Good": "a second copy of Oh, Lady Be Good"
+ },
+ "keep": [
+  "In A Mellow Tone"
+ ]
+}

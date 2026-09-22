@@ -45,11 +45,11 @@ from lyricstats import db  # noqa: E402
 from lyricstats.stats import STOPWORDS  # noqa: E402
 from import_dataset import (  # noqa: E402
     _DEMO_KW,
+    MAX_SONG_WORDS,
     decode_tokens,
     encode_tokens,
-    is_non_song,
 )
-from title_filter import load_classifier  # noqa: E402
+from title_filter import _SONG_GUARD_RE  # noqa: E402
 
 LRCLIB_DIR = os.path.join("data", "lrclib")
 DUMP_PATH = os.path.join(LRCLIB_DIR, "lrclib.sqlite3")
@@ -290,77 +290,6 @@ def content_fingerprint(cnt: Counter) -> tuple | None:
     return tuple(sorted(words[:12])) or None
 
 
-def _dedupe_songs(rows: list[dict], toks: list[Counter]) -> list[int]:
-    """Return one representative row index per distinct song, merging by
-    canonical title OR shared lyric fingerprint (union-find). The kept row is
-    the richest variant: synced lyrics first, then the longest."""
-    parent = list(range(len(rows)))
-
-    def find(x: int) -> int:
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
-
-    def union(a: int, b: int) -> None:
-        parent[find(a)] = find(b)
-
-    first_by_title: dict[str, int] = {}
-    first_by_fp: dict[tuple, int] = {}
-    
-    # Generic titles that shouldn't bridge distinct songs
-    artist_squash = _alnum_squash(rows[0]["artist"]) if rows and rows[0]["artist"] else ""
-    
-    for i, r in enumerate(rows):
-        tk = canonical_title(r["title"], r["artist"])
-        # Only merge by title if the title is meaningful (not just the artist name or tiny string)
-        if tk and len(tk) >= 3 and tk != artist_squash:
-            if tk in first_by_title:
-                union(i, first_by_title[tk])
-            else:
-                first_by_title[tk] = i
-                
-        fp = content_fingerprint(toks[i])
-        if fp is not None:
-            if fp in first_by_fp:
-                union(i, first_by_fp[fp])
-            else:
-                first_by_fp[fp] = i
-
-    best: dict[int, int] = {}
-    for i, r in enumerate(rows):
-        root = find(i)
-        cur = best.get(root)
-        if cur is None or (r["has_synced"], r["wc"]) > \
-                (rows[cur]["has_synced"], rows[cur]["wc"]):
-            best[root] = i
-            
-    for root, best_i in best.items():
-        candidates = [rows[i]["title"] for i in range(len(rows)) if find(i) == root]
-        candidates = [t for t in candidates if t.strip()]
-        if not candidates:
-            shortest_title = rows[best_i]["title"] or ""
-        else:
-            freq = Counter(candidates)
-            def title_score(title):
-                # We want a reasonably short, clean title, but not junk like '.' or 'Live'
-                t_squash = _alnum_squash(title)
-                if len(t_squash) < 3 or title.lower() == rows[best_i]["artist"].lower():
-                    return -999999 # Heavily penalize junk/artist names
-                    
-                score = -len(title)
-                # Boost based on how many times this exact title variant was uploaded
-                score += (freq[title] * 5)
-                
-                if re.search(r'[a-z][A-Z]', title):
-                    score -= 100
-                return score
-            shortest_title = max(candidates, key=title_score)
-        rows[best_i]["title"] = shortest_title
-        
-    return sorted(best.values())
-
-
 def drop_truncation_stubs(aggs: list[tuple]) -> tuple[list[tuple], int]:
     """Drop aggregates whose display name is an encoding-truncated prefix of
     a much bigger artist ("beyonc" 52 next to "Beyoncé" 2067). Only fires
@@ -384,55 +313,76 @@ def drop_truncation_stubs(aggs: list[tuple]) -> tuple[list[tuple], int]:
     return [a for i, a in enumerate(aggs) if i not in drop], len(drop)
 
 
-def fold_artist(rows: list[dict], *, min_songs: int, clf,
-                songs_cap: int = 500) -> tuple | None:
+MIN_SONG_WORDS = 60
+
+
+def outside_song_length(title: str, wc: int) -> bool:
+    """An upload too short or too long to be a song's lyrics. LRCLIB uploads
+    are audio tracks, so the title filters written for the Genius dump
+    (import_dataset.is_non_song: substrings such as "script", "speech" and
+    "tour", a type-token-ratio cut, the fastText title model) removed real
+    songs here: "XO Tour Llif3", "The Manuscript", "Halftime", "Riot Van",
+    "Elephant". Only the length bounds are kept; scripts/catalogue.py sets
+    aside what is not a song by its title (interviews, commentary, voice memos)."""
+    if _SONG_GUARD_RE.search(title or ""):  # a short interlude or skit stays
+        return False
+    return 0 < wc < MIN_SONG_WORDS or wc > MAX_SONG_WORDS
+
+
+def fold_artist(rows: list[dict], *, min_songs: int,
+                songs_cap: int = 500, owners=None, artist_uploads=None, review: dict | None = None,
+                gkey: str | None = None, report: list | None = None) -> tuple | None:
+    """One artist's uploads → their aggregate. The songs are chosen by
+    scripts/catalogue.py: one per song, its most-uploaded transcription,
+    without medleys, their remixes of other artists' songs, non-songs and
+    strays that belong to someone else (`owners`, the ownership index), and
+    with the hand `review` applied. `report` collects every decision."""
+    from catalogue import clean  # scripts/catalogue.py imports this module
+
     # U+FFFD in the artist name = broken encoding upstream; the healthy
     # spelling of the same artist has its own (much larger) group.
-    import re
-    def clean_title(title):
-        if not title: return ""
-        orig_title = title
-        
-        parts = title.split(" - ")
-        if len(parts) > 1:
-            junk_keywords = ["remaster", "edit", "acoustic", "live", "version", "mix", "demo"]
-            if any(k in parts[-1].lower() for k in junk_keywords):
-                title = " - ".join(parts[:-1])
+    # Uploads of one transcription share their token string: decode it once
+    # (a famous song is uploaded hundreds of times) and share the Counter.
+    decoded: dict[str, Counter] = {}
 
-        def replacer(match):
-            content = match.group(0)
-            if re.search(r'\b(feat\.?|ft\.?|featuring)\b', content, re.IGNORECASE):
-                return content
-            return ""
-            
-        title = re.sub(r'\([^)]*\)|\[[^\]]*\]', replacer, title)
-        
-        cleaned = title.strip()
-        return cleaned if cleaned else orig_title
+    def vocab(s: str) -> Counter:
+        c = decoded.get(s)
+        if c is None:
+            c = decoded[s] = Counter(decode_tokens(s))
+        return c
 
-    rows = [dict(r) for r in rows
-            if "\xef\xbf\xbd" not in r["artist"]
-            and not is_non_song(r["title"], r["wc"], r["ttr"], Counter(decode_tokens(r["toks"])), clf=clf)]
-            
-    # NUL bytes from broken submissions break Postgres later; strip on entry
+    kept_rows, toks = [], []
     for r in rows:
-        r["title"] = clean_title(r["title"])
+        if "\xef\xbf\xbd" in r["artist"]:
+            continue
+        if outside_song_length(r["title"], r["wc"] or 0):
+            continue
+        cnt = vocab(r["toks"])
+        r = dict(r)
+        # NUL bytes from broken submissions break Postgres later; strip on entry
         for f in ("artist", "title", "album"):
             if r[f] and "\x00" in r[f]:
                 r[f] = r[f].replace("\x00", "")
-    # Decode each row's vocabulary once; reused for the content fingerprint
-    # and the merged artist vocab below.
-    toks = [Counter(decode_tokens(r["toks"])) for r in rows]
+        kept_rows.append(r)
+        toks.append(cnt)
+    rows = kept_rows
+    if len(rows) < min_songs:
+        return None
 
-    # Dedupe to one row per distinct song. LRCLIB lists every release variant,
-    # cover, karaoke and mislabelled re-upload separately, so a single key can't
-    # catch them. We union two signals: same canonical title OR same lyric
-    # fingerprint (top content words). Title catches variants whose lyrics drift
-    # slightly (live, acoustic); content catches variants whose title is a typo,
-    # track number or foreign spelling. The union lands near real discographies.
-    keep = _dedupe_songs(rows, toks)
-    rows = [rows[i] for i in keep]
-    toks = [toks[i] for i in keep]
+    named = Counter(r["artist"] for r in rows).most_common(1)[0][0]
+    songs = clean(rows, toks, display=named, gkey=gkey or db.normalize_key(named),
+                  owners=owners, artist_uploads=artist_uploads, review=review)
+    if report is not None:
+        report.extend((s, rows) for s in songs)
+    kept = [s for s in songs if s.reason is None]
+    rows2, toks2 = [], []
+    for s in kept:
+        r = dict(rows[s.rep])
+        r["title"] = s.title
+        r["uploads"] = s.uploads
+        rows2.append(r)
+        toks2.append(toks[s.rep])
+    rows, toks = rows2, toks2
     n = len(rows)
     if n < min_songs:
         return None
@@ -460,8 +410,8 @@ def fold_artist(rows: list[dict], *, min_songs: int, clf,
     burst = _best(rows, "fast15", biggest=True, min_wc=40)
 
     langs = Counter(r["lang"] for r in rows if r["lang"])
-    lang_mix = {l: round(c / sum(langs.values()), 3)
-                for l, c in langs.most_common(3)} if langs else {}
+    lang_mix = {lang: round(c / sum(langs.values()), 3)
+                for lang, c in langs.most_common(3)} if langs else {}
 
     curves = [list(map(int, r["curve"].split(","))) for r in rows if r["curve"]]
     avg_curve = None
@@ -574,7 +524,6 @@ def backfill_years(display: str, stats: dict, songs_list: list,
 def fold(tmp: str, *, min_songs: int, songs_cap: int) -> list[tuple]:
     conn = sqlite3.connect(tmp)
     conn.row_factory = sqlite3.Row
-    clf = load_classifier()
     try:
         app_conn = sqlite3.connect(os.path.join("data", "lyricstats.db"))
     except sqlite3.Error:
@@ -598,8 +547,7 @@ def fold(tmp: str, *, min_songs: int, songs_cap: int) -> list[tuple]:
         nonlocal group
         if not group:
             return
-        r = fold_artist(group, min_songs=min_songs, clf=clf,
-                        songs_cap=songs_cap)
+        r = fold_artist(group, min_songs=min_songs, songs_cap=songs_cap)
         if r:
             display, stats, songs_list, g = r
             backfill_years(display, stats, songs_list, app_conn)

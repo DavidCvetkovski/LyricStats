@@ -1,0 +1,15 @@
+{
+ "artist": "Green Day",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Bullet With Butterfly Wings": "a live cover",
+  "Kids in America": "a live cover",
+  "A New England": "a live cover",
+  "Corpus Christi": "a live cover",
+  "We Are the Champions": "a live cover"
+ },
+ "keep": [
+  "Tired Of Waiting For You",
+  "A Quick One While He's Away"
+ ]
+}

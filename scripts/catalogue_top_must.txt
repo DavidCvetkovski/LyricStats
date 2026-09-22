@@ -1,0 +1,160 @@
+# Artists whose catalogues get the hand review whatever their LRCLIB upload
+# count: the ones people look up today, and the Balkan acts the journal covers.
+# LRCLIB's uploaders lean to classic rock, so ranking by uploads alone would
+# leave out much of current pop, hip-hop and Latin music. The rest of the top
+# list is filled by uploads (scripts/clean_catalogues.py --top 500 --must …).
+Taylor Swift
+Drake
+Kendrick Lamar
+Bad Bunny
+Billie Eilish
+The Weeknd
+Ariana Grande
+Beyoncé
+SZA
+Olivia Rodrigo
+Harry Styles
+Sabrina Carpenter
+Chappell Roan
+Travis Scott
+Post Malone
+Doja Cat
+Dua Lipa
+Bruno Mars
+Lady Gaga
+Rihanna
+Eminem
+Nicki Minaj
+Tyler, The Creator
+Frank Ocean
+J. Cole
+Lana Del Rey
+Arctic Monkeys
+Justin Bieber
+BTS
+BLACKPINK
+Karol G
+Rosalía
+Peso Pluma
+Shakira
+Ed Sheeran
+Coldplay
+Imagine Dragons
+Future
+21 Savage
+Lil Baby
+Young Thug
+Playboi Carti
+Kanye West
+JAY-Z
+Nas
+Kid Cudi
+Mac Miller
+Juice WRLD
+XXXTENTACION
+Lil Uzi Vert
+Cardi B
+Megan Thee Stallion
+Ice Spice
+Central Cee
+Dave
+Stormzy
+Burna Boy
+Wizkid
+Rema
+Morgan Wallen
+Zach Bryan
+Noah Kahan
+Gracie Abrams
+Hozier
+Lewis Capaldi
+Sam Smith
+Shawn Mendes
+Charlie Puth
+Selena Gomez
+Miley Cyrus
+Katy Perry
+Adele
+Halsey
+Lorde
+Twenty One Pilots
+Mitski
+Phoebe Bridgers
+Tate McRae
+Benson Boone
+Teddy Swims
+Clairo
+Laufey
+Conan Gray
+Steve Lacy
+Daniel Caesar
+Giveon
+Brent Faiyaz
+Summer Walker
+Jhené Aiko
+Lizzo
+Khalid
+Calvin Harris
+David Guetta
+Avicii
+Kygo
+The Chainsmokers
+Maroon 5
+OneRepublic
+One Direction
+Zayn
+Camila Cabello
+Sia
+Lil Nas X
+Jack Harlow
+Metro Boomin
+Don Toliver
+Lil Wayne
+Snoop Dogg
+2Pac
+The Notorious B.I.G.
+50 Cent
+Linkin Park
+Green Day
+Red Hot Chili Peppers
+Foo Fighters
+Paramore
+My Chemical Romance
+Fall Out Boy
+Panic! At The Disco
+Radiohead
+Gorillaz
+Tame Impala
+The 1975
+Glass Animals
+Cigarettes After Sex
+Deftones
+System Of A Down
+Slipknot
+J Balvin
+Maluma
+Ozuna
+Anuel AA
+Daddy Yankee
+Feid
+Rauw Alejandro
+Myke Towers
+Stray Kids
+TWICE
+IU
+Aya Nakamura
+Stromae
+Måneskin
+Sfera Ebbasta
+Capital Bra
+Apache 207
+Jala Brat
+Buba Corelli
+Coby
+Senidah
+Dino Merlin
+Zdravko Čolić
+Lepa Brena
+Ceca
+Toše Proeski
+Halid Bešlić

@@ -1,0 +1,24 @@
+{
+ "artist": "Frank Sinatra",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Love Me Tender": "Elvis Presley, sung with him on television",
+  "Sway": "Dean Martin",
+  "That's Amore": "Dean Martin",
+  "Memories Are Made of This": "Dean Martin",
+  "Sinatra Speaks on Segregation in Nevada": "a speech",
+  "Comedy Sketch: The Battle of the Century": "a comedy sketch",
+  "The Frank Sinatra Show Vimms Vitamin Commercial": "a commercial",
+  "Sinatra On A Nightingale Sang In Berkeley Square": "spoken word",
+  "Songs by Sinatra Show Opening: Night and Day": "a radio show opening",
+  "Introduction": "stage talk",
+  "The Summit": "a comedy routine",
+  "Love Me Tender, Witchcraft": "a medley",
+  "How Does That Grab You Darlin'?": "Nancy Sinatra",
+  "The End": "Nancy Sinatra",
+  "It's for My Dad": "Nancy Sinatra"
+ },
+ "keep": [
+  "Yesterday"
+ ]
+}

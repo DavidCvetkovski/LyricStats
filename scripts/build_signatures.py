@@ -344,25 +344,60 @@ class SongRows:
             c = self._cnt[i] = decode(self.rows[i][2])
         return c
 
-    def pick(self, titles: list[tuple[str, int | None]]) -> list[int]:
-        """One row per catalogue title: the same title key, the same word count if possible."""
-        wanted: dict[str, int | None] = {}
-        for title, wc in titles:
-            for key in (normalize_key(title), normalize_key(clean_title(title))):
-                if key and key not in wanted:
-                    wanted[key] = wc
-        picked: dict[str, int] = {}
+    def pick(self, titles: list[tuple[str, int | None]], artist: str = "") -> list[int]:
+        """One row per catalogue title: the same title key, the same word count
+        if possible. Keys include the catalogue's own (scripts/catalogue.py:
+        no track number, credit or version), so "01 Billie Jean" finds "Billie Jean"."""
+        from catalogue import title_key
+        from import_lrclib import _alnum_squash
+
+        words = _alnum_squash(artist)
+
+        def keys(title: str) -> tuple[str, ...]:
+            return (normalize_key(title), normalize_key(clean_title(title)), "k:" + title_key(title, words))
+
+        # every key of a catalogue title points at that title; one row per title
+        wanted: dict[str, int] = {}
+        wc_of: list[int | None] = []
+        for n, (title, wc) in enumerate(titles):
+            wc_of.append(wc)
+            for key in keys(title):
+                if key and key != "k:" and key not in wanted:
+                    wanted[key] = n
+        picked: dict[int, int] = {}
         for i, (title, wc, _toks, _tl, _tln) in enumerate(self.rows):
-            for key in (normalize_key(title), normalize_key(clean_title(title))):
-                if key not in wanted:
+            for key in keys(title):
+                n = wanted.get(key)
+                if n is None:
                     continue
-                if key not in picked or (wc == wanted[key] and self.rows[picked[key]][1] != wc):
-                    picked[key] = i
+                cur = picked.get(n)
+                if cur is None or (wc == wc_of[n] and self.rows[cur][1] != wc):
+                    picked[n] = i
                 break
         return sorted(set(picked.values()))
 
 
+OWNER_DB = ROOT / "data" / "lrclib" / "_fp_owner.db"
+_owner: sqlite3.Connection | None = None
+
+
 def fetch_rows(song: sqlite3.Connection, name: str, gkey: str) -> SongRows:
+    """The artist's uploads: every uploaded spelling of the name that folds to
+    their key (scripts/build_owner_index.py's akey_map, the grouping the
+    catalogue uses), else the table's own key column and the plain name."""
+    global _owner
+    if _owner is None and OWNER_DB.exists():
+        _owner = sqlite3.connect(f"file:{OWNER_DB}?mode=ro", uri=True)
+    if _owner is not None:
+        akeys = [a for (a,) in _owner.execute("SELECT akey FROM akey_map WHERE gkey = ?", (gkey,))]
+        if akeys:
+            rows = []
+            for i in range(0, len(akeys), 500):
+                part = akeys[i:i + 500]
+                rows += song.execute(
+                    "SELECT title, wc, toks, top_line, top_line_n FROM song_stat "
+                    f"WHERE akey IN ({','.join('?' * len(part))})", part).fetchall()
+            return SongRows(rows)
     seen: set[int] = set()
     rows: list[tuple] = []
     for sql, arg in (("gkey = ?", gkey), ("akey = ?", name)):
@@ -566,8 +601,10 @@ def load_reviews() -> dict[str, dict]:
 def extra_percentiles(app: sqlite3.Connection) -> dict[str, list[float]]:
     dists: dict[str, list[float]] = {}
     for key in EXTRA_PCTL + BASE_PCTL:
+        # among the artists with a page, as the catalogue's own percentiles are
         vals = [r[0] for r in app.execute(
-            f"SELECT json_extract(stats_json, '$.{key}') FROM artistaggregate") if r[0] is not None]
+            f"SELECT json_extract(stats_json, '$.{key}') FROM artistaggregate WHERE song_count >= 25")
+            if r[0] is not None]
         dists[key] = sorted(vals)
     return dists
 
@@ -674,6 +711,7 @@ def main() -> None:
     reviews = load_reviews()
     app = sqlite3.connect(APP_DB)
     song = sqlite3.connect(f"file:{SONG_DB}?mode=ro", uri=True)
+    song.execute("PRAGMA mmap_size=68000000000")
     dists = extra_percentiles(app)
 
     where, params = "song_count >= ?", [args.min_songs]
@@ -709,7 +747,7 @@ def main() -> None:
             if pct.get(key) is None:
                 pct[key] = pctl(dists, key, stats.get(key))
 
-        sig = signature(display, srows, srows.pick(titles), df, curated=curated, show=args.show)
+        sig = signature(display, srows, srows.pick(titles, display), df, curated=curated, show=args.show)
         if sig:
             found += 1
         if args.write:
@@ -720,7 +758,7 @@ def main() -> None:
         if name in prod:
             ptitles = prod[name]
             same = {normalize_key(t) for t, _ in ptitles} == {normalize_key(t) for t, _ in titles}
-            psig = sig if same else signature(display, srows, srows.pick(ptitles), df, curated=curated)
+            psig = sig if same else signature(display, srows, srows.pick(ptitles, display), df, curated=curated)
             prod_patches[name] = {"signature": psig, "percentiles": pct}
 
         if k % 1000 == 0:

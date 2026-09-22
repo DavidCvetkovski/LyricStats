@@ -1,0 +1,25 @@
+{
+ "artist": "Bob Marley",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Talkin'": "an interview",
+  "Talkin' 8": "an interview",
+  "Talkin’: Workin’ together": "an interview",
+  "Talkin’: Bunny, Peter and Bob": "an interview",
+  "Talkin’: We don’t want to work together no more": "an interview",
+  "Track 14": "not a song",
+  "Stri it Up": "a typo'd copy of Stir It Up",
+  "Try Me re-recording": "a second copy of Try Me",
+  "Lively Up Yourself re-recording": "a second copy of Lively Up Yourself",
+  "Reaction re-recording": "a second copy of Reaction",
+  "Still Be a Lady / Girls Can't Do What the Guys Do (Re-Recorded)": "Yellowman",
+  "Don't Worry, Be Happy": "Bobby McFerrin",
+  "Red Red Wine": "not his",
+  "I Can See Clearly Now": "Johnny Nash",
+  "Hold On To This Feeling": "Rita Marley",
+  "Love Is The Only Law": "Ziggy Marley"
+ },
+ "keep": [
+  "Pass It On"
+ ]
+}

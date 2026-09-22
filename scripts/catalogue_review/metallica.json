@@ -1,0 +1,24 @@
+{
+ "artist": "Metallica",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Solos (Bass/Guitar)": "an instrumental solo",
+  "Drum Solo": "an instrumental solo",
+  "Bass Solo (live at Maimarktgelände, Mannheim, Germany, 05": "an instrumental solo",
+  "Encore Jam #2": "a jam",
+  "Intro To Scythian Suite": "an instrumental intro",
+  "Intro To The Iron Foundry": "an instrumental intro",
+  "Justice Medly": "a medley",
+  "Memory": "not a song",
+  "Don’t Tread On Else Matters": "a mash-up",
+  "We Did It Again (feat. Ja Rule & Swizz Beatz)": "not theirs",
+  "En Dråbe Af Godhed": "not theirs",
+  "Johnny Blade": "Black Sabbath"
+ },
+ "keep": [
+  "Astronomy",
+  "Commando",
+  "Today Your Love, Tomorrow The World",
+  "53rd & 3rd"
+ ]
+}
