@@ -1,0 +1,12 @@
+{
+ "artist": "Georges Brassens",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "La parapluie": "a second copy of Le Parapluie",
+  "El testamento": "a Spanish cover by another singer",
+  "La pata de Juana": "a Spanish cover by another singer",
+  "La mala reputación": "a Spanish cover by another singer",
+  "Le Déserteur": "Boris Vian's song"
+ },
+ "keep": []
+}
