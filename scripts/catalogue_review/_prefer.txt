@@ -1,2 +1,17 @@
 # Artist keys to keep as the page when several spellings fold together.
 tylerthecreator
+# the first importer read "Emerson, Lake & Palmer" as "Surname, First": the
+# scrambled spelling ("Lake and Palmer Emerson", "Jr. Hank Williams") has more uploads
+emersonlakeandpalmer
+bloodsweatandtears
+peterpaulandmary
+groverwashingtonjr
+hankwilliamsjr
+harryconnickjr
+johnhammondjr
+titoschipajr
+fearandloathinginlasvegas
+woeisme
+jumplittlechildren
+parkssquaresandalleys
+phillipscraiganddean

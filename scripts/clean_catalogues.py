@@ -53,6 +53,13 @@ OWNER_DB = os.path.join(ROOT, "data", "lrclib", "_fp_owner.db")
 STAGE_DB = os.path.join(ROOT, "data", "lrclib", "_clean_agg.db")
 PART_DIR = os.path.join(ROOT, "data", "lrclib", "_clean_parts")
 APP_DB = os.path.join(ROOT, "data", "lyricstats.db")
+PRE_CLEAN_DB = os.path.join(ROOT, "data", "lyricstats.pre-clean.db")
+
+
+def pages_db() -> str:
+    """The artist pages as they were before the first commit, which deletes
+    the folded ones: a later fold or commit must still see them."""
+    return PRE_CLEAN_DB if os.path.exists(PRE_CLEAN_DB) else APP_DB
 REVIEW_DIR = os.path.join(ROOT, "scripts", "catalogue_review")
 MIN_SONGS = 5
 
@@ -194,7 +201,7 @@ def build_aliases(min_overlap: float = 0.25) -> dict:
 
     own = sqlite3.connect(f"file:{OWNER_DB}?mode=ro", uri=True)
     rows = dict(own.execute("SELECT gkey, rows FROM artist"))
-    app = sqlite3.connect(APP_DB)
+    app = sqlite3.connect(pages_db())
     pages = {k: d for k, d in app.execute(
         "SELECT name_key, display_name FROM artistaggregate WHERE song_count >= 25")}
     groups: dict[tuple, set[str]] = defaultdict(set)
@@ -330,7 +337,7 @@ def fold_all(workers: int, chunks: int, only: list[str] | None = None) -> None:
         # The artists with a page (≥ 25 songs): the ones the site shows. The
         # small ones stay as they are in the app database, which only this
         # machine reads; folding them too would take hours of random reads.
-        app = sqlite3.connect(APP_DB)
+        app = sqlite3.connect(pages_db())
         keys = {k for (k,) in app.execute("SELECT name_key FROM artistaggregate WHERE song_count >= 25")}
         app.close()
         rows_of = dict(own.execute("SELECT gkey, rows FROM artist"))
@@ -488,7 +495,7 @@ def commit() -> None:
     """Replace the local aggregates with the staged ones, keeping names stable."""
     from lyricstats.db import normalize_key
 
-    backup = os.path.join(ROOT, "data", "lyricstats.pre-clean.db")
+    backup = PRE_CLEAN_DB
     app = sqlite3.connect(APP_DB)
     if not os.path.exists(backup):
         print(f"keeping the old aggregates in {backup}…", flush=True)
@@ -499,8 +506,10 @@ def commit() -> None:
     # One key can hold two stored spellings ("Rosalía", "rosalia"); both get
     # the cleaned catalogue, each keeping its own name.
     names: dict[str, list[tuple[str, str]]] = {}
-    for k, n, d in app.execute("SELECT name_key, name, display_name FROM artistaggregate"):
+    pages = sqlite3.connect(pages_db())
+    for k, n, d in pages.execute("SELECT name_key, name, display_name FROM artistaggregate"):
         names.setdefault(k, []).append((n, d))
+    pages.close()
     st = sqlite3.connect(STAGE_DB)
     stubs = {g for (g,) in st.execute("SELECT gkey FROM stub")} if st.execute(
         "SELECT name FROM sqlite_master WHERE name='stub'").fetchone() else set()

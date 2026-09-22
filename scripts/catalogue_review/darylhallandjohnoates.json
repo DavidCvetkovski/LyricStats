@@ -1,7 +1,9 @@
 {
  "artist": "Daryl Hall & John Oates",
  "reviewed": "2026-09-22",
- "drop": {},
+ "drop": {
+  "Shabba": "a namesake's song, uploaded as Hall"
+ },
  "keep": [],
  "note": "Folds in the halves of the credit the first importer split (scripts/catalogue_review/_aliases_manual.tsv)."
 }
