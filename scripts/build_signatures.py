@@ -96,12 +96,32 @@ PATCH_BATCH = 5000
 
 TOKEN_RE = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*")
 # Ad-libs and onomatopoeia that belong to everyone: syllables that get sung, not said.
-# (Distinctive ones — hee, doo, skrrt — are left to the rarity test.)
 AD_LIB_RE = re.compile(
     r"^(?:[aeiouy]+h*|(?:la|na|da|dah|ooh|ohh|aah|ah|oh|uh|eh|ey|ay|yeah|yah|yo|mm|hmm|"
     r"ba|bum|whoa|woah|wah|ha|hey|oi|ra|ta|ti|di|du|lo|le|li|nah|yea|ye|wo|wa|ho|oo|"
     r"ai|ya|yu|yi|hi|hu|hah|heh|huh|hum|shh|ssh|tsk|brr|grr)+h?)$"
 )
+# Sung vocables the rarity test would crown (hoo, hee, woo, doo, whoo and
+# their stretched forms) and interjections: never a signature, in any language.
+VOCABLE_RE = re.compile(r"^(?!hoodoo$)(?:(?:wh?|h|d)o{2,}h*|(?:wh|h)e{2,}h*|(?:he){2,}h?)+$")
+INTERJECTIONS = set("wow ugh mwah muah meh bleh aha umm uhm pow baow sheesh".split())
+# English spellings of grammar ("cos" for because, "dont", "nothin"); only for
+# English-singing artists, since several are words elsewhere (Romanian "cos").
+EN_SPELLINGS = set(
+    "cos coz cus cah kuz dont cant wont aint thats youre youve youll youd ive isnt arent wasnt werent "
+    "doesnt didnt couldnt wouldnt shouldnt hes shes theyre theyve theyll theres heres whats whos weve "
+    "lets somethin nothin everythin anythin goin comin gettin havin makin sayin bein".split())
+# Section labels and credits that lyrics carry ("[Chorus]", "Repeat", "Copyright").
+LABELS = set("chorus choruses refrain refrains repeat instrumental verse ref refr coro estribillo "
+             "ritornello rit refrão intro outro prechorus copyright reserved".split())
+# Words of a credit footer ("© Nazsongs, Dunfermline. All rights reserved"): a
+# word found almost only in uploads that carry one is part of the footer.
+CREDITS = set("copyright rights reserved ascap bmi socan publishing administered".split())
+# Scripts whose vowel signs the tokenizer drops ("अरमान" → "अरम" + "न"): a word
+# in them is only shown once a hook line gives it back whole.
+SPLIT_SCRIPT_RE = re.compile(r"[\u0900-\u0DFF\u0E00-\u0EFF\u0F00-\u0FFF\u1000-\u109F\u1780-\u17FF]")
+# A whole word in those scripts: letters with their vowel signs and joiners.
+WHOLE_WORD_RE = re.compile(r"(?:[^\W\d_]|[\u0900-\u0DFF\u0E00-\u0EFF\u0F00-\u0FFF\u1000-\u109F\u1780-\u17FF\u200D])+")
 VOWEL_RE = re.compile(r"[aeiouyаеиоуыэюяіїєāáàâäãåéèêëíìîïóòôöõúùûüýÿæøœšžčćđ]")
 JUNK_TITLE = ("remaster", "edit", "acoustic", "live", "version", "mix", "demo")
 
@@ -170,7 +190,9 @@ LANG_WORDS: dict[str, set[str]] = {
 # lists above so that telling an artist's language (and the rarity table
 # built from it) stays as it was. web/lib/filler.ts carries the same words.
 MORE_GRAMMAR: dict[str, set[str]] = {
-    "en": set("gon bout 'bout tryna finna imma ima cuz 'em".split()),
+    "en": set("gon bout 'bout tryna finna imma ima cuz 'em though although tho cannot both either "
+              "neither whether whatever whenever wherever however unless upon within without beneath "
+              "underneath across along among toward towards onto thru til neath kinda sorta outta".split()),
     "bs": set("mene tebe zbog nje nju njoj njemu njega njih svaki svaka svako svakog malo "
               "mnom tobom".split()),
     "es": set("qué porque cuando donde dónde cómo quién eso esto esta este ese esa ella ellos "
@@ -220,7 +242,7 @@ def classify(top_words: list[str]) -> str:
 
 
 def adlib(w: str) -> bool:
-    if AD_LIB_RE.match(w):
+    if AD_LIB_RE.match(w) or VOCABLE_RE.match(w) or w in INTERJECTIONS:
         return True
     if len(w) >= 4 and len(set(w)) <= 2:
         return True
@@ -250,9 +272,28 @@ def decode(toks: str) -> dict[str, int]:
     return {p[i]: int(p[i + 1]) for i in range(0, len(p) - 1, 2)}
 
 
+def strip_accents(w: str) -> str:
+    s = unicodedata.normalize("NFKD", w)
+    return "".join(c for c in s if not unicodedata.combining(c))
+
+
 def name_tokens(display: str) -> set[str]:
     s = unicodedata.normalize("NFKD", display.lower())
     return set(TOKEN_RE.findall(s)) | set(TOKEN_RE.findall(display.lower()))
+
+
+def whole_words(lines: list[str]) -> dict[str, str]:
+    """For a word the tokenizer broke (a script whose vowel signs it drops),
+    the whole word it came from, read off raw lines: the commonest word
+    that starts with it. A word it did not break maps to itself."""
+    seen: dict[str, Counter[str]] = defaultdict(Counter)
+    for line in lines:
+        for word in WHOLE_WORD_RE.findall(unicodedata.normalize("NFC", line.lower())):
+            if SPLIT_SCRIPT_RE.search(word):
+                parts = TOKEN_RE.findall(word)
+                if parts:
+                    seen[parts[0]][word] += 1
+    return {part: words.most_common(1)[0][0] for part, words in seen.items()}
 
 
 # ── document frequency ───────────────────────────────────────────────────────
@@ -308,7 +349,7 @@ class DF:
 def function_word(lang: str, w: str, df: DF) -> bool:
     """Grammar, not vocabulary: on the language's list, or, for a language
     without one, used by most of its artists."""
-    if w in ANY_FUNCTION_WORD:
+    if w in ANY_FUNCTION_WORD or (lang == "en" and w in EN_SPELLINGS):
         return True
     if lang in LANG_WORDS:
         return False
@@ -514,9 +555,12 @@ def signature(display: str, rows: SongRows, idx: list[int], df: DF,
     spread: Counter[str] = Counter()
     uses: Counter[str] = Counter()
     lines: dict[str, list[tuple[int, str, str]]] = defaultdict(list)
+    in_credits: Counter[str] = Counter()
     for i in idx:
         cnt = rows.counts(i)
         spread.update(cnt.keys())
+        if CREDITS & cnt.keys():
+            in_credits.update(cnt.keys())
         for w, c in cnt.items():
             uses[w] += c
         title, _wc, _toks, tl, tln = rows.rows[i]
@@ -526,24 +570,35 @@ def signature(display: str, rows: SongRows, idx: list[int], df: DF,
 
     lang = classify([w for w, _c in uses.most_common(30)])
     forbidden = name_tokens(display)
+    forbidden |= {strip_accents(w) for w in forbidden}
     own = {w for w in forbidden
            if len(w) >= 3 and not VERSION_WORDS.fullmatch(w) and w not in ANY_FUNCTION_WORD}
     floor = max(3, math.ceil(0.06 * n))
+    whole = whole_words([rows.rows[i][3] for i in idx if rows.rows[i][3]])
 
     def usable(w: str) -> bool:
+        if SPLIT_SCRIPT_RE.search(w) and w not in whole:
+            return False  # a broken piece of a word no hook line gives back
+        if spread[w] >= 5 and (uses[w] == spread[w] or in_credits[w] >= 0.8 * spread[w]):
+            return False  # once in every song it is in, or only beside a credit: a footer, a tag, a label
         return (len(w) >= 3 and "'" not in w and "’" not in w and w not in forbidden
+                and strip_accents(w) not in forbidden and w not in LABELS
                 and not adlib(w) and not function_word(lang, w, df) and not foreign(lang, w, df))
+
+    def shown(w: str) -> str:
+        return whole.get(w, w)
 
     # The staple: the word they say most, of the words that carry meaning,
     # provided it turns up in a tenth of the catalogue.
-    staple = None
+    staple, staple_key = None, None
     for w, u in uses.most_common(400):
         if spread[w] >= max(3, math.ceil(0.1 * n)) and usable(w):
-            staple = {"word": w, "songs": spread[w], "uses": u, "share": round(spread[w] / n, 3)}
+            staple, staple_key = {"word": shown(w), "songs": spread[w], "uses": u,
+                                  "share": round(spread[w] / n, 3)}, w
             break
     # The table under it: the words said most, each in more than one song so
     # that one chant does not make a staple.
-    staples = [[w, spread[w], u] for w, u in uses.most_common(800)
+    staples = [[shown(w), spread[w], u] for w, u in uses.most_common(800)
                if spread[w] >= max(2, math.ceil(0.03 * n)) and usable(w)][:STAPLES]
 
     # The signature: recurrence across the catalogue, weighted by how much
@@ -570,9 +625,10 @@ def signature(display: str, rows: SongRows, idx: list[int], df: DF,
     if not cands and not staple:
         return None
 
-    words = [[w, spread[w], uses[w]] for _s, w in cands[:12]]
-    word = cands[0][1] if cands else staple["word"]
-    quote = hook_quote(lines.get(word, []), own)
+    words = [[shown(w), spread[w], uses[w]] for _s, w in cands[:12]]
+    key = cands[0][1] if cands else staple_key
+    word = shown(key)
+    quote = hook_quote(lines.get(key, []), own)
     is_curated = False
     if curated and curated.get("word") and spread.get(curated["word"], 0) >= 1:
         cw = curated["word"]
@@ -591,12 +647,16 @@ def signature(display: str, rows: SongRows, idx: list[int], df: DF,
             quote = {"line": cq["quote"], "title": cq["song_title"], "times": 0}
         else:
             quote = hook_quote(lines.get(cw, []), own)
+    if not is_curated:
+        word_songs, word_uses = spread[key], uses[key]
+    else:
+        word_songs, word_uses = spread[word], uses[word]
     return {
         "lang": lang,
         "word": word,
-        "songs": spread[word],
-        "uses": uses[word],
-        "share": round(spread[word] / n, 3),
+        "songs": word_songs,
+        "uses": word_uses,
+        "share": round(word_songs / n, 3),
         "quote": quote,
         "words": words,
         "staple": staple,

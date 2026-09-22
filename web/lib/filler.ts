@@ -12,7 +12,18 @@ const EN_GRAMMAR =
   "won't can't couldn't wouldn't shouldn't isn't aren't wasn't weren't ain't i'm i've i'll i'd " +
   "you're you've you'll you'd he's she's it's we're we've we'll they're they've they'll that's " +
   "there's here's what's who's let's than then so too very just only also yeah yes oh ah uh well " +
-  "okay ok hey gonna wanna gotta gimme lemme cause 'cause gon bout 'bout tryna finna imma ima cuz 'em";
+  "okay ok hey gonna wanna gotta gimme lemme cause 'cause gon bout 'bout tryna finna imma ima cuz 'em " +
+  "though although tho cannot both either neither whether whatever whenever wherever however unless " +
+  "upon within without beneath underneath across along among toward towards onto thru til neath " +
+  "kinda sorta outta " +
+  // spellings of grammar without the apostrophe (build_signatures.py EN_SPELLINGS; the ones
+  // that are words in other languages — cos, cant, lets, makin, bein — stay out here)
+  "coz cus cah kuz dont wont aint thats youre youve youll youd ive isnt arent wasnt werent doesnt " +
+  "didnt couldnt wouldnt shouldnt hes shes theyre theyve theyll theres heres whats whos weve " +
+  "somethin nothin everythin anythin goin comin gettin havin sayin " +
+  // section labels and credits that lyrics carry (build_signatures.py LABELS)
+  "chorus choruses refrain refrains repeat instrumental verse ref refr coro estribillo ritornello " +
+  "rit refrão intro outro prechorus copyright reserved";
 // English words that carry little on their own: set aside when choosing one word to stand for a catalogue.
 const EN_GENERIC =
   "go goes going gone went come comes came coming get gets got getting gotten let make made making " +
@@ -74,6 +85,11 @@ const LISTS = [
 const FILLER = new Set(LISTS.join(" ").split(/\s+/).filter(Boolean));
 const GENERIC = new Set(EN_GENERIC.split(/\s+/));
 
+// Sung vocables and interjections (build_signatures.py VOCABLE_RE, INTERJECTIONS).
+const VOCABLE = /^(?!hoodoo$)(?:(?:wh?|h|d)o{2,}h*|(?:wh|h)e{2,}h*|(?:he){2,}h?)+$/;
+const INTERJECTIONS = new Set("wow ugh mwah muah meh bleh aha umm uhm pow baow sheesh".split(" "));
+const VOWEL = /[aeiouyаеиоуыэюяіїєāáàâäãåéèêëíìîïóòôöõúùûüýÿæøœšžčćđ]/;
+
 const AD_LIB = /^(?:[aeiouy]+h*|(?:la|na|da|dah|ooh|ohh|aah|ah|oh|uh|eh|ey|ay|yeah|yah|yo|mm|hmm|ba|bum|whoa|woah|wah|ha|hey|oi|ra|ta|ti|di|du|lo|le|li|nah|yea|ye|wo|wa|ho|oo|ai|ya|yu|yi|hi|hu|hah|heh|huh|hum|shh|ssh|tsk|brr|grr)+h?)$/;
 
 /** True for a word that carries no meaning on its own: grammar or an ad-lib. */
@@ -81,8 +97,9 @@ export function isFiller(word: string): boolean {
   const w = word.toLowerCase().replace(/’/g, "'");
   if (w.length < 3) return true;
   if (FILLER.has(w)) return true;
-  if (AD_LIB.test(w)) return true;
+  if (AD_LIB.test(w) || VOCABLE.test(w) || INTERJECTIONS.has(w)) return true;
   if (w.length >= 4 && new Set(w).size <= 2) return true;
+  if (/^[\x00-\x7f]+$/.test(w) && !VOWEL.test(w)) return true;
   return false;
 }
 
