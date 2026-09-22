@@ -34,12 +34,6 @@ def test_english_spellings_of_grammar_count_only_for_english_singers():
     assert bs.function_word("es", "though", df)   # English grammar, any language
 
 
-def test_a_broken_indic_word_is_read_back_whole_from_a_hook_line():
-    whole = bs.whole_words(["मेरा आसमाँ जल गया रे", "जले बैरी मन, सुलगे बदन"])
-    assert whole["आसम"] == "आसमाँ"  # the tokenizer cut it at the vowel sign
-    assert whole["बदन"] == "बदन"    # no vowel sign: whole already
-
-
 def test_the_signature_skips_ad_libs_labels_and_credit_footers():
     rows = []
     for i in range(20):

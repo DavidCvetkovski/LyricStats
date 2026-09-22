@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { joinerVariants, nameMatches } from "./utils";
+import { joinerVariants, nameMatches, wordsIn } from "./utils";
 
 describe("joinerVariants", () => {
   it("reads a joiner between words as 'and', then as nothing", () => {
@@ -23,5 +23,12 @@ describe("nameMatches", () => {
     expect(nameMatches("Mumford And Sons", "Mumford & Sons")).toBe(true);
     expect(nameMatches("Mumford And Sons", "mumford so")).toBe(false);
     expect(nameMatches("Simon & Garfunkel", "simon and garf")).toBe(true);
+  });
+});
+
+describe("wordsIn", () => {
+  it("keeps vowel signs inside a word", () => {
+    expect(wordsIn("लग जा गले")).toEqual(["लग", "जा", "गले"]);
+    expect(wordsIn("Don't stop")).toEqual(["don't", "stop"]);
   });
 });

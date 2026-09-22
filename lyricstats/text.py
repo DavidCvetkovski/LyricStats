@@ -6,13 +6,21 @@ Unicode-safe — handles š, č, ž, đ, etc. for Bosnian/Serbian/Croatian.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
+
+from .marks import MARKS
 
 
 # Section header like "[Chorus]", "[Verse 1]", "[Bridge: Jala Brat]"
 SECTION_RE = re.compile(r"^\s*\[([^\]]+)\]\s*$", re.MULTILINE)
-# Tokens: runs of letters (any unicode), apostrophes inside
-TOKEN_RE = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*", re.UNICODE)
+# Tokens: a letter (any script), then letters, the vowel signs and other
+# combining marks that sit on them, and a zero-width joiner inside a word
+# (Sinhala and Indic conjuncts); apostrophes inside. \w alone would cut
+# "गले" into "ग" + "ल" at each vowel sign. A zero-width non-joiner still
+# breaks a word, as Persian writes it.
+_PIECE = f"[^\\W\\d_](?:[^\\W\\d_]|[{MARKS}]|\u200d(?=[^\\W\\d_]|[{MARKS}]))*"
+TOKEN_RE = re.compile(f"{_PIECE}(?:['’]{_PIECE})*", re.UNICODE)
 # Lines to drop entirely (Genius adds these sometimes)
 JUNK_LINE_RE = re.compile(
     r"^\s*(?:\d+ Contributors?.*|.*Lyrics$|.*Translations?.*|Embed\s*$|You might also like.*)$",
@@ -104,8 +112,9 @@ def all_lines(text: str) -> list[str]:
 
 
 def tokenize(text: str) -> list[str]:
-    """Lowercase word tokens, unicode-aware."""
-    return [m.group(0).lower() for m in TOKEN_RE.finditer(text)]
+    """Lowercase word tokens, unicode-aware; composed (NFC) so "é" typed as
+    e + accent and as one letter make the same word."""
+    return [m.group(0).lower() for m in TOKEN_RE.finditer(unicodedata.normalize("NFC", text))]
 
 
 def char_count(text: str, *, include_spaces: bool = False) -> int:

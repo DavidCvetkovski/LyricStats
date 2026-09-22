@@ -122,11 +122,16 @@ def line_times(synced: str, lines: list[str]) -> list[float | None] | None:
     return out
 
 
+# Vowel signs of the scripts that write vowels as marks (Devanagari through
+# Khmer): part of a line's ending there, unlike a Latin accent.
+_SIGN_RE = re.compile(r"[\u0900-\u0DFF\u0E00-\u0EFF\u0F00-\u0FFF\u1000-\u109F\u1780-\u17FF]")
+
+
 def _line_ending(ln: str) -> str:
     """Last 3 letters of a line, lowercased and diacritics-stripped, for the
     crude end-rhyme match (š→s, ć→c, … so 'noći'/'oči' style pairs count)."""
     s = unicodedata.normalize("NFKD", ln.lower())
-    letters = [c for c in s if c.isalpha() and not unicodedata.combining(c)]
+    letters = [c for c in s if (c.isalpha() and not unicodedata.combining(c)) or _SIGN_RE.match(c)]
     return "".join(letters[-3:])
 
 
@@ -178,6 +183,9 @@ def song_stats(
     Returns None for an empty text or one past MAX_SONG_WORDS (a lyrics page
     that is really a libretto or a mistagged album).
     """
+    # one form for each letter, so a word typed two ways counts once
+    plain = unicodedata.normalize("NFC", plain)
+    synced = unicodedata.normalize("NFC", synced) if synced else synced
     lines = [ln.strip() for ln in plain.split("\n")]
     # Section headers ("[Chorus]") are furniture, not lines that get sung.
     lines = [ln for ln in lines if ln and not SECTION_RE.match(ln)]

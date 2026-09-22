@@ -44,7 +44,8 @@ export function nameMatches(name: string, typed: string): boolean {
   return [artistKey(typed), ...joinerVariants(typed)].some((k) => have.includes(k));
 }
 
-/** Lower-case word tokens, any script; apostrophes stay inside a word. */
+/** Lower-case word tokens, any script, vowel signs kept inside a word
+ * (lyricstats/text.py TOKEN_RE); apostrophes stay inside a word. */
 export function wordsIn(text: string): string[] {
-  return text.normalize("NFC").toLowerCase().match(/\p{L}+(?:['’]\p{L}+)*/gu) ?? [];
+  return text.normalize("NFC").toLowerCase().match(/\p{L}[\p{L}\p{M}]*(?:['’]\p{L}[\p{L}\p{M}]*)*/gu) ?? [];
 }

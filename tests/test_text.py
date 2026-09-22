@@ -10,6 +10,20 @@ def test_tokenize_handles_bhs_diacritics():
     assert "čovječe" in tokens
 
 
+
+def test_tokenize_keeps_vowel_signs_inside_a_word():
+    # Devanagari, Tamil and Sinhala write vowels as marks; a word is not cut at them
+    assert tokenize("लग जा गले") == ["लग", "जा", "गले"]
+    assert tokenize("மனமே") == ["மனமே"]
+    assert tokenize("ආදරය") == ["ආදරය"]
+
+
+def test_tokenize_composes_accents_and_keeps_a_persian_break():
+    import unicodedata
+
+    assert tokenize(unicodedata.normalize("NFD", "élève")) == ["élève"]
+    assert tokenize("می\u200cخواهم") == ["می", "خواهم"]  # a zero-width non-joiner still breaks
+
 def test_tokenize_lowercases():
     assert tokenize("HELLO World") == ["hello", "world"]
 

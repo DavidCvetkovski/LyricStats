@@ -122,3 +122,11 @@ def test_line_times_are_dropped_when_the_texts_do_not_match():
 def test_reading_refuses_an_empty_text_and_a_libretto():
     assert reading("x", "") is None
     assert reading("x", "word " * 2001) is None
+
+
+
+def test_a_hindi_line_ending_keeps_its_vowel_signs():
+    from lyricstats.reading import _line_ending
+
+    assert _line_ending("लग जा गले") != _line_ending("लग जा गल")  # गले ≠ गल
+    assert _line_ending("noći") == "oci"  # a Latin accent still drops, for 'noći'/'oči' rhymes

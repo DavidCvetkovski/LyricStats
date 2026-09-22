@@ -94,7 +94,7 @@ BASE_PCTL = ("total_unique_words", "avg_ttr", "avg_wpm", "avg_hook_share",
 STAPLES = 25
 PATCH_BATCH = 5000
 
-TOKEN_RE = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*")
+from lyricstats.text import TOKEN_RE  # noqa: E402  (the tokens song_stat.toks were made with)
 # Ad-libs and onomatopoeia that belong to everyone: syllables that get sung, not said.
 AD_LIB_RE = re.compile(
     r"^(?:[aeiouy]+h*|(?:la|na|da|dah|ooh|ohh|aah|ah|oh|uh|eh|ey|ay|yeah|yah|yo|mm|hmm|"
@@ -117,11 +117,6 @@ LABELS = set("chorus choruses refrain refrains repeat instrumental verse ref ref
 # Words of a credit footer ("© Nazsongs, Dunfermline. All rights reserved"): a
 # word found almost only in uploads that carry one is part of the footer.
 CREDITS = set("copyright rights reserved ascap bmi socan publishing administered".split())
-# Scripts whose vowel signs the tokenizer drops ("अरमान" → "अरम" + "न"): a word
-# in them is only shown once a hook line gives it back whole.
-SPLIT_SCRIPT_RE = re.compile(r"[\u0900-\u0DFF\u0E00-\u0EFF\u0F00-\u0FFF\u1000-\u109F\u1780-\u17FF]")
-# A whole word in those scripts: letters with their vowel signs and joiners.
-WHOLE_WORD_RE = re.compile(r"(?:[^\W\d_]|[\u0900-\u0DFF\u0E00-\u0EFF\u0F00-\u0FFF\u1000-\u109F\u1780-\u17FF\u200D])+")
 VOWEL_RE = re.compile(r"[aeiouyаеиоуыэюяіїєāáàâäãåéèêëíìîïóòôöõúùûüýÿæøœšžčćđ]")
 JUNK_TITLE = ("remaster", "edit", "acoustic", "live", "version", "mix", "demo")
 
@@ -281,19 +276,6 @@ def name_tokens(display: str) -> set[str]:
     s = unicodedata.normalize("NFKD", display.lower())
     return set(TOKEN_RE.findall(s)) | set(TOKEN_RE.findall(display.lower()))
 
-
-def whole_words(lines: list[str]) -> dict[str, str]:
-    """For a word the tokenizer broke (a script whose vowel signs it drops),
-    the whole word it came from, read off raw lines: the commonest word
-    that starts with it. A word it did not break maps to itself."""
-    seen: dict[str, Counter[str]] = defaultdict(Counter)
-    for line in lines:
-        for word in WHOLE_WORD_RE.findall(unicodedata.normalize("NFC", line.lower())):
-            if SPLIT_SCRIPT_RE.search(word):
-                parts = TOKEN_RE.findall(word)
-                if parts:
-                    seen[parts[0]][word] += 1
-    return {part: words.most_common(1)[0][0] for part, words in seen.items()}
 
 
 # ── document frequency ───────────────────────────────────────────────────────
@@ -574,11 +556,7 @@ def signature(display: str, rows: SongRows, idx: list[int], df: DF,
     own = {w for w in forbidden
            if len(w) >= 3 and not VERSION_WORDS.fullmatch(w) and w not in ANY_FUNCTION_WORD}
     floor = max(3, math.ceil(0.06 * n))
-    whole = whole_words([rows.rows[i][3] for i in idx if rows.rows[i][3]])
-
     def usable(w: str) -> bool:
-        if SPLIT_SCRIPT_RE.search(w) and w not in whole:
-            return False  # a broken piece of a word no hook line gives back
         if spread[w] >= 5 and (uses[w] == spread[w] or in_credits[w] >= 0.8 * spread[w]):
             return False  # once in every song it is in, or only beside a credit: a footer, a tag, a label
         return (len(w) >= 3 and "'" not in w and "’" not in w and w not in forbidden
@@ -586,7 +564,7 @@ def signature(display: str, rows: SongRows, idx: list[int], df: DF,
                 and not adlib(w) and not function_word(lang, w, df) and not foreign(lang, w, df))
 
     def shown(w: str) -> str:
-        return whole.get(w, w)
+        return w
 
     # The staple: the word they say most, of the words that carry meaning,
     # provided it turns up in a tenth of the catalogue.
