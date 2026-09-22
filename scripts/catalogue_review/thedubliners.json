@@ -1,0 +1,19 @@
+{
+ "artist": "The Dubliners",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Weila Waila": "second copy of Weila Waile",
+  "Weile Waile": "second copy of Weila Waile",
+  "Leaving of Liverpool": "second copy of The Leaving of Liverpool",
+  "Kelly The Boy From Killane": "second copy of Kelly, The Boy From Killan",
+  "McAlpine's Fusiliers Behan": "second copy of McAlpine's Fusiliers",
+  "Paddy Reilly - The Town I Loved So Well": "second copy of The Town I Loved So Well",
+  "Instrumental": "an instrumental",
+  "Introduction": "a spoken introduction",
+  "The Waterford Boys,the Humours of Scariff,the Flannel Jacket": "a set of instrumental reels"
+ },
+ "keep": [],
+ "rename": {
+  "Mormon Braes (1993 Digital Remaster)": "Mormon Braes"
+ }
+}

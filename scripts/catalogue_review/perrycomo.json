@@ -1,0 +1,17 @@
+{
+ "artist": "Perry Como",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Forever & Ever": "second copy of Forever And Ever",
+  "Watching The Trains Go By (Digitally Remastered)": "second copy of Watchin the Trains Go By",
+  "If (with Mitchell Ayres & His Orchestra)": "second copy of If",
+  "Caroling, Caroling ⁄ The First Noel ⁄ Hark! The Herald Angels Sing ⁄ Silent Night": "medley"
+ },
+ "keep": [],
+ "rename": {
+  "Twasthe Night Before Christmas": "'Twas the Night Before Christmas",
+  "Two Lost Souls - 128 kbps - Joint Stereo": "Two Lost Souls",
+  "It Only Happens When I Dance With You (Digitally Remastered)": "It Only Happens When I Dance With You",
+  "Roses Of Picardy (Digitally Remastered)": "Roses Of Picardy"
+ }
+}
