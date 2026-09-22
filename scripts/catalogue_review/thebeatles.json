@@ -2,7 +2,7 @@
  "artist": "The Beatles",
  "reviewed": "2026-09-22",
  "drop": {
-  "Love These Goon Shows!": "spoken word",
+  "Love These Goon Shows!": "radio banter",
   "Crinsk Dee Night": "spoken word",
   "From Fluff To You": "spoken word",
   "A Hard Job Writing Them": "spoken word",
@@ -23,11 +23,18 @@
   "John Lennon talks live during the \"Bed-in\" in Amsterdam": "an interview",
   "Madrid To Australian By Graham Webb July 1965": "an interview",
   "Paul McCartney talks about advice from his father": "an interview",
-  "Boys, What I Was Thinking...": "spoken word",
+  "Boys, What I Was Thinking...": "a studio jam",
   "Just A Rumour": "spoken word",
   "Concentrate on the Sound (mono)": "spoken word",
   "Ringo`s Theme (This Boy) [Inst": "the George Martin orchestra",
-  "Ya Ya (Parts 1+2)": "Tony Sheridan"
+  "Ya Ya (Parts 1+2)": "Tony Sheridan",
+  "Madrid to Australian by Graham Webb July 1965": "an interview",
+  "Here Comes the Sun The Inner Light": "two songs listed separately",
+  "Drive My Car The Word What You're Doing": "songs listed separately",
+  "Step Inside Love-Los Paranoias": "a studio jam medley",
+  "Shake, Rattle And Roll/Blue Suede Shoes": "a studio jam medley",
+  "Fool On Hill": "a fragment of The Fool On The Hill",
+  "Why (Can't You Love Me Again)": "Tony Sheridan"
  },
  "keep": []
 }
