@@ -1,0 +1,13 @@
+{
+ "artist": "Mylene Farmer",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Introduction": "a concert introduction, not a song",
+  "I Want You to Want Me": "Cheap Trick's song"
+ },
+ "keep": [],
+ "rename": {
+  "Et Si Vieller Metait Conte": "Et si vieillir m'était conté",
+  "Ode а l'apesanteur": "Ode à l'apesanteur"
+ }
+}
