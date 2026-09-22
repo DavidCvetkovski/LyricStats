@@ -548,6 +548,8 @@ def commit() -> None:
 
 # Heavy keys production has never carried (scripts/push_aggregates.py strips them).
 PROD_DROP_KEYS = ("albums", "density_curve", "lang_mix")
+# Word lists production has always carried at these lengths (the Neon cap is 0.5 GB).
+PROD_TRIM = {"signature_words": 10, "top_words": 20, "top_words_no_stop": 20}
 PROD_SONGS_CAP = 500
 
 
@@ -596,6 +598,9 @@ def prod_plan(path: str) -> None:
         stats = json.loads(stats_json)
         for k in PROD_DROP_KEYS:
             stats.pop(k, None)
+        for k, n in PROD_TRIM.items():
+            if isinstance(stats.get(k), list):
+                stats[k] = stats[k][:n]
         if quote is not None:
             stats["motif_quote"] = quote
         songs = json.loads(songs_json)[:PROD_SONGS_CAP]
