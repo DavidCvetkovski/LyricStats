@@ -138,6 +138,31 @@ def fold_one(song: sqlite3.Connection, gkey: str, review: dict | None, *, report
                        gkey=gkey, report=report)
 
 
+REPORT_COLS = ("gkey TEXT, title TEXT, uploads INTEGER, wc INTEGER, reason TEXT, owner TEXT, "
+               "owner_n INTEGER, flags TEXT, album TEXT, lang TEXT")
+_HANGUL = re.compile(r"[\uac00-\ud7af]")
+_KANA = re.compile(r"[\u3040-\u30ff]")
+
+
+def song_lang(toks: str | None) -> str | None:
+    """The language a kept song is sung in, from its 30 most-used words
+    (build_signatures.classify; Chinese, Japanese and Korean told apart), or
+    None when there are too few words to tell."""
+    from build_signatures import classify
+
+    p = (toks or "").split()
+    pairs = sorted(((p[i], int(p[i + 1])) for i in range(0, len(p) - 1, 2)), key=lambda x: -x[1])
+    words = [w for w, _c in pairs[:30]]
+    if len(words) < 10:
+        return None
+    lang = classify(words)
+    if lang == "cjk":
+        ko = sum(bool(_HANGUL.search(w)) for w in words)
+        ja = sum(bool(_KANA.search(w)) for w in words)
+        lang = "ko" if ko >= max(ja, 1) else ("ja" if ja else "zh")
+    return None if lang == "xx" else lang
+
+
 def _fold_chunk(args: tuple[int, list[str]]) -> tuple[int, int]:
     from import_dataset import encode_tokens
 
@@ -151,8 +176,7 @@ def _fold_chunk(args: tuple[int, list[str]]) -> tuple[int, int]:
     out.execute("PRAGMA journal_mode=OFF")
     out.execute("CREATE TABLE agg (gkey TEXT, display TEXT, stats_json TEXT, songs_json TEXT)")
     out.execute("CREATE TABLE tok (gkey TEXT, toks TEXT)")
-    out.execute("CREATE TABLE report (gkey TEXT, title TEXT, uploads INTEGER, wc INTEGER, "
-                "reason TEXT, owner TEXT, owner_n INTEGER, flags TEXT, album TEXT)")
+    out.execute(f"CREATE TABLE report ({REPORT_COLS})")
     done = 0
     for gkey in gkeys:
         report: list = []
@@ -163,10 +187,11 @@ def _fold_chunk(args: tuple[int, list[str]]) -> tuple[int, int]:
                         (gkey, display, json.dumps(stats, ensure_ascii=False),
                          json.dumps(songs_list, ensure_ascii=False)))
             out.execute("INSERT INTO tok VALUES (?,?)", (gkey, encode_tokens(g)))
-            out.executemany("INSERT INTO report VALUES (?,?,?,?,?,?,?,?,?)", [
+            out.executemany("INSERT INTO report VALUES (?,?,?,?,?,?,?,?,?,?)", [
                 (gkey, s.title, s.uploads, rows[s.rep]["wc"], s.reason,
                  s.owner[0] if s.owner else None, s.owner[1] if s.owner else None,
-                 ",".join(s.flags) or None, rows[s.rep]["album"])
+                 ",".join(s.flags) or None, rows[s.rep]["album"],
+                 song_lang(rows[s.rep]["toks"]) if s.reason is None else None)
                 for s, rows in report])
             done += 1
     out.commit()
@@ -441,13 +466,15 @@ def fold_all(workers: int, chunks: int, only: list[str] | None = None) -> None:
     tk = sqlite3.connect(tok_path)
     tk.execute("PRAGMA journal_mode=OFF")
     tk.execute("CREATE TABLE IF NOT EXISTS artist_tok (name TEXT PRIMARY KEY, toks TEXT)")
-    st.execute("CREATE TABLE IF NOT EXISTS report (gkey TEXT, title TEXT, uploads INTEGER, wc INTEGER, "
-               "reason TEXT, owner TEXT, owner_n INTEGER, flags TEXT, album TEXT)")
+    st.execute(f"CREATE TABLE IF NOT EXISTS report ({REPORT_COLS})")
+    if "lang" not in {c for _i, c, *_r in st.execute("PRAGMA table_info(report)")}:
+        st.execute("ALTER TABLE report ADD COLUMN lang TEXT")  # a stage folded before languages
     for k in range(chunks):
         part = os.path.join(PART_DIR, f"part{k:03d}.db")
         st.execute("ATTACH ? AS p", (part,))
         st.execute("INSERT OR REPLACE INTO agg SELECT * FROM p.agg")
-        st.execute("INSERT INTO report SELECT * FROM p.report")
+        names = ", ".join(c.split()[0] for c in REPORT_COLS.split(", "))
+        st.execute(f"INSERT INTO report ({names}) SELECT {names} FROM p.report")
         st.commit()
         st.execute("DETACH p")
         tk.execute("ATTACH ? AS p", (part,))
