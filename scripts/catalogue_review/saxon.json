@@ -1,0 +1,24 @@
+{
+ "artist": "Saxon",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "English Man Of War": "second copy of English Man 'O' War"
+ },
+ "keep": [
+  "Court Of The Crimson King",
+  "Paperback Writer",
+  "Immigrant Song",
+  "Paint It Black",
+  "Hold The Line",
+  "Man On the Silver Mountain",
+  "Problem Child",
+  "See My Friends",
+  "Substitute",
+  "The Faith Healer",
+  "Gypsy"
+ ],
+ "rename": {
+  "No Rest For The Wcked": "No Rest For The Wicked",
+  "Atila The Hun": "Attila The Hun"
+ }
+}
