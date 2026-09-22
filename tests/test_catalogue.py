@@ -132,3 +132,23 @@ def test_hindi_uploads_of_one_song_merge_though_the_tokenizer_left_short_words()
                         ("Tere Liye", liye * 3, 4, 200)], artist="Lata Mangeshkar")
     songs = clean(rows, toks, display="Lata Mangeshkar", gkey="latamangeshkar")
     assert _kept(songs) == ["Lag Ja Gale", "Tere Liye"]
+
+
+def test_skits_and_short_interludes_are_set_aside_but_a_sung_interlude_is_not():
+    rows, toks = _rows([
+        ("Love Story", SONG_A, 5, 200),
+        ("Nicky (Skit)", SONG_B, 2, 474),
+        ("Interlude: Race", "we are in a race between education and catastrophe", 2, 11),
+        ("Interlude (Style)", SONG_C * 4, 2, 180),
+    ], artist="Janet Jackson")
+    songs = {s.title: s.reason for s in clean(rows, toks, display="Janet Jackson", gkey="janetjackson")}
+    assert songs["Love Story"] is None
+    assert songs["Nicky (Skit)"] == "skit or interlude"
+    assert songs["Interlude: Race"] == "skit or interlude"
+    assert songs["Interlude (Style)"] is None
+
+
+def test_a_hyphenated_mega_mix_is_a_medley():
+    rows, toks = _rows([("Love Story", SONG_A, 5, 200), ("The Grease Mega-Mix", SONG_B + SONG_C, 3, 500)])
+    songs = {s.title: s.reason for s in clean(rows, toks, display="Taylor Swift", gkey="taylorswift")}
+    assert songs["The Grease Mega-Mix"] == "medley or megamix"

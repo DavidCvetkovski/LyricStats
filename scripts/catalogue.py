@@ -54,7 +54,11 @@ TITLE_JUNK_RE = re.compile(
     re.I,
 )
 TRAILING_YEAR_RE = re.compile(r"\s+(?:19|20)\d{2}$")
-MASH_RE = re.compile(r"\b(?:megamix|mega mix|medley|mash-?up|megamashup)\b", re.I)
+MASH_RE = re.compile(r"\b(?:megamix|mega[- \u2010]mix|medley|mash-?up|megamashup)\b", re.I)
+# A skit is talk; an interlude of a few lines is a fragment between songs.
+SKIT_RE = re.compile(r"\bskit\b", re.I)
+INTERLUDE_RE = re.compile(r"\binterlude\b", re.I)
+INTERLUDE_MAX_WORDS = 100
 # Words that make a bracket or dash clause a version of a song.
 VERSION_WORD_RE = re.compile(
     r"\b(?:remix(?:ed)?|mix|edit|rework|bootleg|dub|version|flip|refix|vip|remode|"
@@ -375,6 +379,10 @@ def clean(rows: list[dict], toks: list[Counter], *, display: str, gkey: str,
             continue
         if all(NON_SONG_RE.search(t) for t in raw):
             s.reason = "not a song"
+            continue
+        if all(SKIT_RE.search(t) for t in raw) or (
+                all(INTERLUDE_RE.search(t) for t in raw) and (rows[s.rep]["wc"] or 0) < INTERLUDE_MAX_WORDS):
+            s.reason = "skit or interlude"
             continue
         if re.search(r"\bvs\.?\s", s.title, re.I) and any(w in _alnum_squash(s.title).split() for w in own_words):
             s.reason = "mash-up"
