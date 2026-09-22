@@ -55,9 +55,10 @@ TITLE_JUNK_RE = re.compile(
 )
 TRAILING_YEAR_RE = re.compile(r"\s+(?:19|20)\d{2}$")
 MASH_RE = re.compile(r"\b(?:megamix|mega[- \u2010]mix|medley|mash-?up|megamashup)\b", re.I)
-# A skit is talk; an interlude of a few lines is a fragment between songs.
+# A skit is talk; an interlude, intro or outro of a few lines is a fragment
+# between songs, or talk ("Nicki Minaj Speaks", "Intro to Both Sides Now").
 SKIT_RE = re.compile(r"\bskit\b", re.I)
-INTERLUDE_RE = re.compile(r"\binterlude\b", re.I)
+INTERLUDE_RE = re.compile(r"\b(?:interlude|intro|introductions?|outro|prologue|speaks|dialog(?:ue)?)\b", re.I)
 INTERLUDE_MAX_WORDS = 100
 # Title unions skip rows whose words are mostly uploaded under another title.
 KEY_UNION_GUARD = True
@@ -77,7 +78,9 @@ NON_SONG_RE = re.compile(
     r"radio promo|spoken intro|audio book|audiobook|chapter \d|kapitel \d|"
     r"behind the scenes|making of|album preview|phone call with|phone conversation|"
     r"press conference|acceptance speech|liner notes|tracklist|full album|spoken interlude|"
-    r"band introductions?|introducing the band|pr[ée]sentation des musiciens|radio spot)\b",
+    r"band introductions?|band intros?|introducing the band|pr[ée]sentation des musiciens|radio spot|"
+    r"announcements?|halftime show|promotional spot|radio commercial|commercial for|tour promo|album ad|"
+    r"radio show|spoken word|session highlights|studio banter|public service)\b",
     re.I,
 )
 # A clause that credits a remixer ("(Avicii Remix)", "- Alec Empire Mix"); a
@@ -434,7 +437,10 @@ def clean(rows: list[dict], toks: list[Counter], *, display: str, gkey: str,
     for s in songs:
         raw = [plain(rows[i]["title"]) for i in s.rows]
         # medleys, megamixes, mash-ups
-        if all(MASH_RE.search(t) for t in raw):
+        def most(rx: re.Pattern) -> bool:  # most of the uploads are titled so
+            return 2 * sum(bool(rx.search(t)) for t in raw) > len(raw)
+
+        if most(MASH_RE):
             s.reason = "medley or megamix"
             continue
         # "Teddy Bear / Don't Be Cruel": most uploads name songs listed on their own
@@ -449,11 +455,10 @@ def clean(rows: list[dict], toks: list[Counter], *, display: str, gkey: str,
         if own_words and len(own_remix) == len(raw):
             s.reason = "their remix of another artist's song"
             continue
-        if all(NON_SONG_RE.search(t) for t in raw):
+        if most(NON_SONG_RE):
             s.reason = "not a song"
             continue
-        if all(SKIT_RE.search(t) for t in raw) or (
-                all(INTERLUDE_RE.search(t) for t in raw) and (rows[s.rep]["wc"] or 0) < INTERLUDE_MAX_WORDS):
+        if most(SKIT_RE) or (most(INTERLUDE_RE) and (rows[s.rep]["wc"] or 0) < INTERLUDE_MAX_WORDS):
             s.reason = "skit or interlude"
             continue
         if re.search(r"\bvs\.?\s", s.title, re.I) and any(w in _alnum_squash(s.title).split() for w in own_words):

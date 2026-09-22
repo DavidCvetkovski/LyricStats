@@ -201,3 +201,17 @@ def test_a_suite_holding_its_movements_stays_a_song():
     rows, toks = _rows([("2112", (SONG_A + SONG_B) * 3, 40, 500), ("Overture", SONG_A * 3, 5, 200),
                         ("The Temples of Syrinx", SONG_B * 3, 5, 200)], artist="Rush")
     assert _kept(clean(rows, toks, display="Rush", gkey="rush")) == ["2112", "Overture", "The Temples of Syrinx"]
+
+
+def test_short_talk_and_announcements_are_set_aside_by_most_of_their_titles():
+    rows, toks = _rows([
+        ("Love Story", SONG_A, 5, 200),
+        ("Nicki Minaj Speaks", SONG_B, 3, 67), ("Speaks", SONG_B, 1, 67),
+        ("Intro to Both Sides Now", SONG_C * 2, 4, 80),
+        ("RF Announcement", "robert fripp says hello to the audience tonight", 3, 60),
+    ], artist="Nicki Minaj")
+    songs = {s.title: s.reason for s in clean(rows, toks, display="Nicki Minaj", gkey="nickiminaj")}
+    assert songs["Love Story"] is None
+    assert songs["Nicki Minaj Speaks"] == "skit or interlude"
+    assert songs["Intro to Both Sides Now"] == "skit or interlude"
+    assert songs["RF Announcement"] == "not a song"
