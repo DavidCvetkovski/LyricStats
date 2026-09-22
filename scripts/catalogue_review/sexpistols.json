@@ -1,0 +1,17 @@
+{
+ "artist": "Sex Pistols",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Submissions": "second copy of Submission",
+  "(Don't Give Me) No Lip (Live a": "live copy of No Lip",
+  "Body": "second copy of Bodies",
+  "I Love Rock 'N Roll": "Joan Jett's song",
+  "Angels with Dirty Faces": "Sham 69's song",
+  "Chinese Rocks": "The Heartbreakers' song"
+ },
+ "keep": [],
+ "rename": {
+  "Einmal War Belsen Wirflich Bortrefflish": "Einmal War Belsen Wirklich Vortrefflich",
+  "Johnny be goode": "Johnny B. Goode"
+ }
+}
