@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -285,6 +286,47 @@ def alias_group(gkey: str) -> set[str]:
     return {gkey} | {a for a, c in aliases().items() if c == gkey}
 
 
+NAME_SPLIT_RE = re.compile(r"\s*(?:&|\+|,|\band\b|\bund\b|\be\b|\by\b|(?<=\w)-(?=\w))\s*", re.I)
+
+
+def _spelled_by(key: str, words: list[str], ordered: bool) -> bool:
+    """Can `key` be written by joining some of `words` (in their order), with
+    "and" and "the" anywhere?"""
+    @lru_cache(maxsize=None)
+    def go(i: int, used: int, last: int) -> bool:
+        if i == len(key):
+            return True
+        if any(key.startswith(c, i) and go(i + len(c), used, last) for c in ("and", "the")):
+            return True
+        return any(w and not used >> j & 1 and (not ordered or j > last) and key.startswith(w, i)
+                   and go(i + len(w), used | 1 << j, j) for j, w in enumerate(words))
+    return go(0, 0, -1)
+
+
+def is_fragment(alias: str, display: str) -> bool:
+    """Not another spelling of the page's name ("Simon & Garfunkel", "Beatles",
+    "Ye") but a piece of a name that holds several ("Garfunkel" of "Simon &
+    Garfunkel", "Nash" of "Crosby Stills Nash") or the first importer's
+    scramble of it ("Lake and Palmer Emerson", "Presley Elvis")."""
+    from lyricstats.db import normalize_key
+
+    parts = [p for p in NAME_SPLIT_RE.split(display) if p.strip()]
+    if len(parts) < 2 and len(display.split()) >= 3:
+        parts = display.split()  # "Crosby Stills Nash", stored without its commas
+    words = [w for w in (normalize_key(w) for p in parts for w in p.split()) if w not in ("and", "the")]
+    if len(words) > 12:
+        return False
+    if _spelled_by(alias, words, False) and not _spelled_by(alias, words, True):
+        return True  # the words, out of order
+    if len(parts) < 2:
+        return False
+    pieces = set()
+    for p in parts:
+        k = normalize_key(p)
+        pieces |= {k, k.removeprefix("the")} | {normalize_key(w) for w in p.split()}
+    return alias in pieces
+
+
 # ── sample ───────────────────────────────────────────────────────────────────
 
 
@@ -514,27 +556,39 @@ def commit() -> None:
     stubs = {g for (g,) in st.execute("SELECT gkey FROM stub")} if st.execute(
         "SELECT name FROM sqlite_master WHERE name='stub'").fetchone() else set()
     now = time.strftime("%Y-%m-%d %H:%M:%S")
+    # Another spelling of a page ("Simon & Garfunkel" of "Simon and Garfunkel",
+    # "Beatles") keeps its row, with the page's catalogue: people type it, old
+    # links hold it. A piece of a duo's name ("Garfunkel") is not a page.
+    spellings: dict[str, list[str]] = {}
+    fragments: dict[str, str] = {}
+    for a, c in aliases().items():
+        page_name = (names.get(c) or [(None, c)])[0][1]
+        if is_fragment(a, page_name):
+            fragments[a] = c
+        else:
+            spellings.setdefault(c, []).append(a)
     rows = []
     used: set[str] = set()
     for g, display, stats_json, songs_json in st.execute("SELECT gkey, display, stats_json, songs_json FROM agg"):
         if g in stubs or g in aliases() or g in removed_keys():
             continue  # folded into another page, or not a page at all
         count = json.loads(stats_json)["song_count"]
-        for name, disp in names.get(g, [(display.strip().lower(), display)]):
+        own = names.get(g, [(display.strip().lower(), display)])
+        for name, disp in own + [nd for a in spellings.get(g, []) for nd in names.get(a, [])]:
             if name in used:
                 continue
             used.add(name)
             rows.append((name, normalize_key(disp) or g, disp, count, stats_json, songs_json, now))
-    # pages that are not pages any more: other spellings folded into an
-    # artist, and pages a review removed
+    # pages that are not pages any more: pieces of a duo's name folded into
+    # it, and pages a review removed
     reviews = load_reviews()
-    gone = {a: f"folded into {c}" for a, c in aliases().items()}
+    gone = {a: f"folded into {c}" for a, c in fragments.items()}
     gone.update({g: "removed: " + r["remove"] for g, r in reviews.items() if r.get("remove")})
     removed = [(name, g, why) for g, why in gone.items() for name, _d in names.get(g, [])]
     with open(os.path.join(ROOT, "output", "catalogue-removed-pages.json"), "w", encoding="utf-8") as fh:
         json.dump([{"name": n, "key": g, "why": w} for n, g, w in removed], fh, ensure_ascii=False, indent=0)
     app.executemany("DELETE FROM artistaggregate WHERE name = ?", ((n,) for n, _g, _w in removed))
-    print(f"{len(removed):,} pages removed (aliases and reviewed removals)", flush=True)
+    print(f"{len(removed):,} pages removed (pieces of a duo's name, reviewed removals)", flush=True)
     print(f"writing {len(rows):,} aggregates…", flush=True)
     app.executemany("DELETE FROM artistaggregate WHERE name = ?", ((r[0],) for r in rows))
     app.executemany(
@@ -576,6 +630,22 @@ def prod_backup(path: str) -> None:
     print(f"backed up {n:,} production rows → {path}", flush=True)
 
 
+def _prod_row(count: int, stats_json: str, songs_json: str, quote) -> dict:
+    """A local aggregate as production carries it."""
+    stats = json.loads(stats_json)
+    for k in PROD_DROP_KEYS:
+        stats.pop(k, None)
+    for k, n in PROD_TRIM.items():
+        if isinstance(stats.get(k), list):
+            stats[k] = stats[k][:n]
+    if quote is not None:
+        stats["motif_quote"] = quote
+    songs = json.loads(songs_json)[:PROD_SONGS_CAP]
+    return {"song_count": count,
+            "stats_json": json.dumps(stats, ensure_ascii=False, separators=(",", ":")),
+            "songs_json": json.dumps(songs, ensure_ascii=False, separators=(",", ":"))}
+
+
 def prod_plan(path: str) -> None:
     """For every production row, the cleaned catalogue from the app database."""
     import psycopg
@@ -594,19 +664,7 @@ def prod_plan(path: str) -> None:
         if not row:
             missing.append(name)
             continue
-        count, stats_json, songs_json = row
-        stats = json.loads(stats_json)
-        for k in PROD_DROP_KEYS:
-            stats.pop(k, None)
-        for k, n in PROD_TRIM.items():
-            if isinstance(stats.get(k), list):
-                stats[k] = stats[k][:n]
-        if quote is not None:
-            stats["motif_quote"] = quote
-        songs = json.loads(songs_json)[:PROD_SONGS_CAP]
-        patches[name] = {"song_count": count,
-                         "stats_json": json.dumps(stats, ensure_ascii=False, separators=(",", ":")),
-                         "songs_json": json.dumps(songs, ensure_ascii=False, separators=(",", ":"))}
+        patches[name] = _prod_row(*row, quote)
     with open(path, "w", encoding="utf-8") as fh:
         json.dump({"built": time.strftime("%Y-%m-%d %H:%M"), "patches": patches, "missing": missing},
                   fh, ensure_ascii=False)
@@ -666,6 +724,38 @@ def prod_remove(path: str) -> None:
           f"(their page is not in production)", flush=True)
 
 
+def prod_restore(backup_path: str) -> None:
+    """Put back the production rows of a backup that production lacks and the
+    app database has again (spellings of a page that an earlier commit
+    removed), with the cleaned catalogue."""
+    import gzip
+
+    import psycopg
+    from build_signatures import prod_url
+
+    app = sqlite3.connect(APP_DB)
+    local = {name: (count, stats, songs) for name, count, stats, songs in app.execute(
+        "SELECT name, song_count, stats_json, songs_json FROM artistaggregate")}
+    with psycopg.connect(prod_url(), connect_timeout=15) as conn:
+        have = {n for (n,) in conn.execute("SELECT name FROM artistaggregate")}
+        rows = []
+        with gzip.open(backup_path, "rt", encoding="utf-8") as fh:
+            for line in fh:
+                r = json.loads(line)
+                if r["name"] in have or r["name"] not in local:
+                    continue
+                quote = json.loads(r["stats_json"] or "{}").get("motif_quote")
+                p = _prod_row(*local[r["name"]], quote)
+                rows.append((r["id"], r["name"], r["name_key"], r["display_name"], p["song_count"],
+                             r["has_sections"], p["stats_json"], p["songs_json"], r["source"]))
+        with conn.cursor() as cur:
+            cur.executemany(
+                "INSERT INTO artistaggregate (id, name, name_key, display_name, song_count, has_sections, "
+                "stats_json, songs_json, source, built_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s, now())", rows)
+        conn.commit()
+    print(f"restored {len(rows):,} production rows", flush=True)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sample", action="append")
@@ -680,6 +770,7 @@ def main() -> None:
     ap.add_argument("--prod-plan", help="compute the production patch into this file")
     ap.add_argument("--prod-apply", help="apply a saved production patch")
     ap.add_argument("--prod-remove", help="delete the production rows listed in this file")
+    ap.add_argument("--prod-restore", help="put back rows of this backup that are pages again")
     ap.add_argument("--corpus", action="store_true")
     ap.add_argument("--commit", action="store_true")
     ap.add_argument("--workers", type=int, default=8)
@@ -715,6 +806,8 @@ def main() -> None:
         prod_apply(args.prod_apply)
     if args.prod_remove:
         prod_remove(args.prod_remove)
+    if args.prod_restore:
+        prod_restore(args.prod_restore)
 
 
 if __name__ == "__main__":

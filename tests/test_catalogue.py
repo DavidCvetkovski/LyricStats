@@ -229,3 +229,15 @@ def test_titles_that_sound_like_talk_but_name_songs_stay():
         assert not NON_SONG_RE.search(song), song
     for talk in ("The 49 Weeks (spoken word)", "Lady Killer (Commentary)", "US Radio Spot"):
         assert NON_SONG_RE.search(talk), talk
+
+
+def test_a_spelling_of_a_duo_keeps_its_page_but_a_piece_or_a_scramble_of_it_does_not():
+    import clean_catalogues as cc
+
+    for alias, page in [("simongarfunkel", "Simon And Garfunkel"), ("beatles", "The Beatles"), ("ye", "Kanye West"),
+                        ("hallandoates", "Daryl Hall And John Oates"), ("nilsson", "Harry Nilsson")]:
+        assert not cc.is_fragment(alias, page), alias
+    for alias, page in [("garfunkel", "Simon And Garfunkel"), ("nash", "Crosby Stills Nash"), ("blank", "Blank-Jones"),
+                        ("lakeandpalmeremerson", "Emerson Lake and Palmer"), ("presleyelvis", "Elvis Presley"),
+                        ("jrhankwilliams", "Hank Williams Jr.")]:
+        assert cc.is_fragment(alias, page), alias
