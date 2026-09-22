@@ -4,7 +4,8 @@ One file per artist, named by the artist's key (`lyricstats.db.normalize_key`),
 read by `scripts/clean_catalogues.py` when it folds that artist. The rules in
 `scripts/catalogue.py` run first; a review only corrects them. The top 500
 artists (`output/review/top.tsv`) were reviewed by hand on 2026-09-22, the
-next 500 (`output/review/next500.tsv`) the day after.
+next 251 (ranks 501–751, `output/review/next250.tsv`) the day after. Ranks
+752 and down have the rules and the namesake check (below) only.
 
 ```json
 {
@@ -78,8 +79,9 @@ In `tools/`:
 
 - `compact.py START END [BUDGET]`: the review sheet for ranks START to END,
   from `data/lrclib/_clean_agg.db` (or `REPORT_DB`) and the ranked list
-  `output/review/top.tsv` (or `TOP_TSV`; ranks 501–1000 are in
-  `output/review/top1000.tsv`).
+  `output/review/top.tsv` (or `TOP_TSV`; ranks 1–1000 are in
+  `output/review-later/top1000.tsv`, kept out of `output/review/` so the
+  namesake check still covers the ranks not reviewed by hand).
 - `namesakes.py OUT_DIR [BUDGET]`: hint sheets for pages outside the ranked
   lists that hold a cluster of songs in a language the page otherwise does not
   sing in, from albums the rest never appears on — often a namesake. Nothing
