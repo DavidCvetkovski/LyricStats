@@ -1,0 +1,16 @@
+{
+ "artist": "Patsy Cline",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "The Heat You Break May Be Your Own": "second copy of The Heart You Break May Be Your Own",
+  "Angel": "second copy of I Can See An Angel",
+  "Let It Snow": "not a Patsy Cline recording"
+ },
+ "keep": [],
+ "rename": {
+  "Remeber Me I'm The One Who Loves You": "Remember Me (I'm The One Who Loves You)",
+  "Side By Side (Radio Transcrip": "Side By Side",
+  "Cry Not For Me - Original Gusto Recordings": "Cry Not For Me",
+  "When My Dreamboat Comes Home - Announcer ending": "When My Dreamboat Comes Home"
+ }
+}
