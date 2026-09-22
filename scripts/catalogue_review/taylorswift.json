@@ -39,9 +39,12 @@
   "Dust": "removed in David's June review",
   "Drops Of Jupiter": "removed in David's June review",
   "Both of Us": "removed in David's June review",
-  "Back To December-Apologize-You're Not Sorry": "removed in David's June review"
+  "Back To December-Apologize-You're Not Sorry": "removed in David's June review",
+  "September - Recorded at The Tracking Room Nashville": "removed in David's June review"
  },
- "keep": [],
+ "keep": [
+  "The Diary Of Me"
+ ],
  "rename": {
   "16": "Anti-Hero",
   "Safe": "Safe & Sound",
