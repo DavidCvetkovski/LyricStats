@@ -1,0 +1,23 @@
+{
+ "artist": "Tony Bennett",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Introduction Of Dave Brubeck Quartet": "a stage introduction",
+  "Die With A Smile": "Lady Gaga & Bruno Mars",
+  "Growing Pains": "another act's song",
+  "We Wish You A Merry Christmas - Silent Night - O Come All Ye Faithful - Jingle Bells - Where Is Love": "a medley",
+  "You're Easy To Dance With Change Partners Cheek To Cheek": "a medley",
+  "Everybody’s Talking": "a second copy of Ev'rybody's Talkin'",
+  "The Boulevard of Broken Dreams": "a second copy of Boulevard of Broken Dreams"
+ },
+ "keep": [
+  "That Lucky Old Sun (Just Rolls Around Heaven All Day)",
+  "A Nightingale Sang In Berkeley Square",
+  "The Look Of Love",
+  "The Song Is You",
+  "Call Me Irresponsible",
+  "Honeysuckle Rose",
+  "It’s Like Reaching for the Moon",
+  "Stardust"
+ ]
+}
