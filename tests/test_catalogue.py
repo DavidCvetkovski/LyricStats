@@ -195,6 +195,11 @@ def test_a_drop_takes_only_the_song_shown_under_its_title_when_two_share_a_key()
     copy = Song(rows=[1], rep=1, title="If (with Mitchell Ayres & His Orchestra)", key="if", uploads=1)
     _apply_review([main, copy], {"drop": {"If (with Mitchell Ayres & His Orchestra)": "second copy"}}, "perry como")
     assert main.reason is None and copy.reason == "reviewed: second copy"
+    # two reviewed titles under one key each take their own copy
+    go = Song(rows=[0], rep=0, title="Go", key="go", uploads=2)
+    mix = Song(rows=[1], rep=1, title="Go (Amphetamix)", key="go", uploads=1)
+    _apply_review([go, mix], {"drop": {"Go": "an instrumental", "Go [Amphetamix]": "a remix"}}, "moby")
+    assert go.reason and mix.reason
 
 
 def test_a_suite_holding_its_movements_stays_a_song():
@@ -215,3 +220,12 @@ def test_short_talk_and_announcements_are_set_aside_by_most_of_their_titles():
     assert songs["Nicki Minaj Speaks"] == "skit or interlude"
     assert songs["Intro to Both Sides Now"] == "skit or interlude"
     assert songs["RF Announcement"] == "not a song"
+
+
+def test_titles_that_sound_like_talk_but_name_songs_stay():
+    from catalogue import NON_SONG_RE
+    for song in ("Message From A Black Man", "Trapped in the Closet Chapter 1", "Commercial for Levi",
+                 "Radio Show", "No Spoken Word", "Making of a Soul"):
+        assert not NON_SONG_RE.search(song), song
+    for talk in ("The 49 Weeks (spoken word)", "Lady Killer (Commentary)", "US Radio Spot"):
+        assert NON_SONG_RE.search(talk), talk

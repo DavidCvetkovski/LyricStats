@@ -73,14 +73,18 @@ VERSION_WORD_RE = re.compile(
 )
 # a bracket clause, or one cut off by a truncated title: "A Kind Of Magic (Demo"
 CLAUSE_RE = re.compile(r"[(\[{][^)\]}]*(?:[)\]}]|$)")
+# Talk, not a song. Phrases that are also song titles ("Message From a Black
+# Man", "Trapped in the Closet Chapter 1", "Commercial for Levi", "Radio
+# Show", "No Spoken Word") are left out, or count only as a bracket clause.
 NON_SONG_RE = re.compile(
-    r"\b(?:voice[- ]?over|voice memo|interview|commentary|track by track|message from|"
-    r"radio promo|spoken intro|audio book|audiobook|chapter \d|kapitel \d|"
-    r"behind the scenes|making of|album preview|phone call with|phone conversation|"
+    r"\b(?:voice[- ]?over|voice memo|interview|commentary|track by track|"
+    r"radio promo|spoken intro|audio book|audiobook|"
+    r"behind the scenes|album preview|phone call with|phone conversation|"
     r"press conference|acceptance speech|liner notes|tracklist|full album|spoken interlude|"
     r"band introductions?|band intros?|introducing the band|pr[ée]sentation des musiciens|radio spot|"
-    r"announcements?|halftime show|promotional spot|radio commercial|commercial for|tour promo|album ad|"
-    r"radio show|spoken word|session highlights|studio banter|public service)\b",
+    r"announcements?|halftime show|promotional spot|radio commercial|tour promo|album ad|"
+    r"session highlights|studio banter)\b"
+    r"|[(\[-]\s*spoken word\b",
     re.I,
 )
 # A clause that credits a remixer ("(Avicii Remix)", "- Alec Empire Mix"); a
@@ -514,14 +518,16 @@ def _apply_review(songs: list[Song], review: dict, artist_words: str) -> None:
     by_key: dict[str, list[Song]] = defaultdict(list)
     for s in songs:
         by_key[s.key].append(s)
-    exact = {k(t): _alnum_squash(t) for t in (review.get("drop") or {})}
+    exact: dict[str, set[str]] = defaultdict(set)
+    for t in review.get("drop") or {}:
+        exact[k(t)].add(_alnum_squash(t))
     for s in songs:
         if only:
             s.reason = None if s.key in only else "not in the reviewed list"
         if s.key in drop:
             twins = by_key[s.key]
-            if len(twins) > 1 and any(_alnum_squash(x.title) == exact[s.key] for x in twins) \
-                    and _alnum_squash(s.title) != exact[s.key]:
+            if len(twins) > 1 and any(_alnum_squash(x.title) in exact[s.key] for x in twins) \
+                    and _alnum_squash(s.title) not in exact[s.key]:
                 continue
             s.reason = "reviewed: " + (drop[s.key] or "not theirs")
         elif s.key in keep:
