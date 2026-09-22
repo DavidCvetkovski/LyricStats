@@ -152,3 +152,11 @@ def test_a_hyphenated_mega_mix_is_a_medley():
     rows, toks = _rows([("Love Story", SONG_A, 5, 200), ("The Grease Mega-Mix", SONG_B + SONG_C, 3, 500)])
     songs = {s.title: s.reason for s in clean(rows, toks, display="Taylor Swift", gkey="taylorswift")}
     assert songs["The Grease Mega-Mix"] == "medley or megamix"
+
+
+def test_a_review_renames_a_song_shown_under_a_wrong_title():
+    rows, toks = _rows([("Enrique Iglesias", SONG_A, 5, 200), ("Miente", SONG_A, 2, 200), ("Hero", SONG_B, 5, 200)],
+                       artist="Enrique Iglesias")
+    songs = clean(rows, toks, display="Enrique Iglesias", gkey="enriqueiglesias",
+                  review={"rename": {"Enrique Iglesias": "Miente"}})
+    assert _kept(songs) == ["Hero", "Miente"]

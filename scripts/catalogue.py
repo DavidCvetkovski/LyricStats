@@ -421,8 +421,9 @@ def clean(rows: list[dict], toks: list[Counter], *, display: str, gkey: str,
 
 def _apply_review(songs: list[Song], review: dict, artist_words: str) -> None:
     """Hand decisions win. A review holds "drop" ({title: why}), "keep"
-    ([title], restoring a song the rules set aside) and, for a catalogue
-    curated in full, "only" ([title]); titles match by their key."""
+    ([title], restoring a song the rules set aside), "rename" ({title: the
+    song's real title}) and, for a catalogue curated in full, "only" ([title]);
+    titles match by their key."""
     def k(t: str) -> str:
         return title_key(t, artist_words)
 
@@ -436,3 +437,9 @@ def _apply_review(songs: list[Song], review: dict, artist_words: str) -> None:
             s.reason = "reviewed: " + (drop[s.key] or "not theirs")
         elif s.key in keep:
             s.reason = None
+    # a song shown under a wrong title ("Enrique Iglesias" for "Miente")
+    rename = {k(t): new for t, new in (review.get("rename") or {}).items()}
+    for s in songs:
+        if s.key in rename:
+            s.title = rename[s.key]
+            s.key = k(s.title)
