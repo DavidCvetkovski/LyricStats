@@ -1,0 +1,16 @@
+{
+ "artist": "Andy Williams",
+ "reviewed": "2026-09-22",
+ "drop": {},
+ "keep": [
+  "Here, There and Everywhere",
+  "Theme From 'The Valley of the Dolls'",
+  "You Don't Know What Love Is",
+  "By the Time I Get to Phoenix",
+  "My Cherie Amour",
+  "Summer Wind"
+ ],
+ "rename": {
+  "Love Is a Many-Splendored Thing (From the 20th Century-Fox Picture \"Love Is a Many-Splendored Thing\")": "Love Is a Many-Splendored Thing"
+ }
+}
