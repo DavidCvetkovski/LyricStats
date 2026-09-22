@@ -379,9 +379,13 @@ def clean(rows: list[dict], toks: list[Counter], *, display: str, gkey: str,
                 holds[big][c_] = 1.0
     uf2 = UnionFind(n)
     medleys: set[int] = set()
+    main_key = {root: Counter(keys[i] for i in idx).most_common(1)[0][0] for root, idx in groups.items()}
     for big, parts in holds.items():
         ps = list(parts)
-        if MEDLEY_GUARD and any(containment(vec[p], vec[q]) < 0.5 for i, p in enumerate(ps) for q in ps[i + 1:]):
+        # "Echoes" holds "Echoes, Part 1" and "Echoes, Part 2": its own parts, not a medley
+        own_parts = all(main_key[p].startswith(main_key[big]) for p in ps)
+        if MEDLEY_GUARD and not own_parts and \
+                any(containment(vec[p], vec[q]) < 0.5 for i, p in enumerate(ps) for q in ps[i + 1:]):
             medleys.add(big)
             continue
         for p in ps:

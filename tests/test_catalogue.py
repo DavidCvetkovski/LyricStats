@@ -172,3 +172,9 @@ def test_one_mislabelled_upload_or_a_medley_does_not_make_two_songs_one():
     songs = {s.title: s.reason for s in clean(rows, toks, display="Oasis", gkey="oasis")}
     assert songs["Step Out"] is None and songs["Underneath the Sky"] is None and songs["Brain Damage"] is None
     assert songs["Brain Damage / Underneath the Sky"] == "medley of songs listed separately"
+
+
+def test_a_song_holding_its_own_parts_is_not_a_medley():
+    rows, toks = _rows([("Echoes", (SONG_A + SONG_B) * 3, 30, 400), ("Echoes, Part 1", SONG_A * 3, 5, 200),
+                        ("Echoes, Part 2", SONG_B * 3, 4, 200)], artist="Pink Floyd")
+    assert _kept(clean(rows, toks, display="Pink Floyd", gkey="pinkfloyd")) == ["Echoes"]
