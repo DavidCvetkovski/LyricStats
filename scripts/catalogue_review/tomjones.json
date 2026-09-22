@@ -1,0 +1,14 @@
+{
+ "artist": "Tom Jones",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Behing Closed Doors": "a misspelt copy of Behind Closed Doors",
+  "Run Clero Run Clero": "a second copy of Run Clero Run",
+  "Bet You Look Good On The Dancefloor": "a television cover, never released"
+ },
+ "keep": [
+  "Tower Of Song",
+  "When The Deal Goes Down",
+  "There Goes My Everything"
+ ]
+}
