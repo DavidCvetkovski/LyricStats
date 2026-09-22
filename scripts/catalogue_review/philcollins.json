@@ -1,0 +1,16 @@
+{
+ "artist": "Phil Collins",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "Bienvenue": "a dubbed version by another singer",
+  "Hermano Oso - En marcha estoy": "a dubbed version by another singer",
+  "Hold On My Heart": "Genesis",
+  "That's All with Genesis": "Genesis",
+  "If I Had Any Sense Left at All": "Reba McEntire",
+  "Secret": "Reba McEntire",
+  "The Roof Is Leaking - Nicka's Stella Polaris Interpretation": "a reinterpretation by another artist"
+ },
+ "keep": [
+  "Burn Down The Mission"
+ ]
+}
