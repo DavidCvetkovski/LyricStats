@@ -27,5 +27,8 @@
   "You're So Static": "Elton John",
   "Ticket to Ride": "not his"
  },
- "keep": []
+ "keep": [],
+ "rename": {
+  "My Mummy's Dead (Evolution Documentary)": "My Mummy's Dead"
+ }
 }

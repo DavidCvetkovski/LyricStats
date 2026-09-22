@@ -5,7 +5,11 @@
   "Chromeo - Just Friends (feat Amber Mark": "Chromeo",
   "Light Years - From the Infinite Disco Livestream": "a live copy of Light Years",
   "Stop Crying Your Heart Out (BBC Radio 2 Allstars)": "a charity ensemble",
-  "I Guess I Like It Like That - Keep on Pumpin' It": "a second copy of I Guess I Like It Like That"
+  "I Guess I Like It Like That - Keep on Pumpin' It": "a second copy of I Guess I Like It Like That",
+  "Kylie's Smiley Mix": "a megamix"
  },
- "keep": []
+ "keep": [],
+ "rename": {
+  "Kiss Me Once Live At the SSE Hydro": "Kiss Me Once"
+ }
 }

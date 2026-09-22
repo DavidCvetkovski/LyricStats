@@ -1,7 +1,9 @@
 {
  "artist": "Tears for Fears",
  "reviewed": "2026-09-22",
- "drop": {},
+ "drop": {
+  "16 Roland & Curt Interviewed": "an interview"
+ },
  "keep": [
   "Ready to Start",
   "And I Was A Boy From School"
