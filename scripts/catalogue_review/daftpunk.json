@@ -1,0 +1,17 @@
+{
+ "artist": "Daft Punk",
+ "reviewed": "2026-09-22",
+ "drop": {
+  "The Writing of Fragments of Time": "studio talk from the making of the album",
+  "Is Playing at My House Album": "not a song title: an album",
+  "Ian Pooley ''Chord Memory'' [Musique, Vol. 1, 2006]": "their remix of Ian Pooley's song",
+  "ian pooley-chord memory (daft pun": "their remix of Ian Pooley's song",
+  "LYTD (Vocoder Tests)": "vocoder tests for Lose Yourself to Dance",
+  "Music Sounds Better With You (as Stardust)": "Stardust, another act"
+ },
+ "keep": [],
+ "rename": {
+  "Revolution 909 (Roger Sanchez": "Revolution 909",
+  "Beyond (Drumless Edition)": "Beyond"
+ }
+}
