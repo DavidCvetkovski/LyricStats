@@ -575,9 +575,10 @@ def prod_plan(path: str) -> None:
         "SELECT name, song_count, stats_json, songs_json FROM artistaggregate")}
     with psycopg.connect(prod_url(), connect_timeout=15) as conn:
         conn.execute("SET TRANSACTION READ ONLY")
-        names = [n for (n,) in conn.execute("SELECT name FROM artistaggregate")]
+        # the v1 code reads motif_quote: it stays, so a rollback looks as it did
+        quotes = dict(conn.execute("SELECT name, (stats_json::json)->'motif_quote' FROM artistaggregate"))
     patches, missing = {}, []
-    for name in names:
+    for name, quote in quotes.items():
         row = local.get(name)
         if not row:
             missing.append(name)
@@ -586,6 +587,8 @@ def prod_plan(path: str) -> None:
         stats = json.loads(stats_json)
         for k in PROD_DROP_KEYS:
             stats.pop(k, None)
+        if quote is not None:
+            stats["motif_quote"] = quote
         songs = json.loads(songs_json)[:PROD_SONGS_CAP]
         patches[name] = {"song_count": count,
                          "stats_json": json.dumps(stats, ensure_ascii=False, separators=(",", ":")),
