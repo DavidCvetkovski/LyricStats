@@ -402,8 +402,15 @@ def search_artist_aggregates(q: str, limit: int = 8) -> list[ArtistSuggestion]:
     if variants:  # 'Mumford & So' also looks under 'mumfordandso', biggest first
         for v in variants:
             rows += _search_cached(v, limit)
-        rows = sorted(dict(rows).items(), key=lambda r: -r[1])[:limit]
-    return [ArtistSuggestion(display_name=n, song_count=c) for n, c in rows]
+        rows.sort(key=lambda r: -r[1])
+    # another spelling of a page shows the page's name: offer that name once
+    seen: set[str] = set()
+    out = []
+    for n, c in rows:
+        if n.casefold() not in seen:
+            seen.add(n.casefold())
+            out.append(ArtistSuggestion(display_name=n, song_count=c))
+    return out[:limit]
 
 
 @lru_cache(maxsize=2048)

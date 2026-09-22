@@ -1,0 +1,236 @@
+# name<TAB>display<TAB>why. Keyed by artistaggregate.name (unique). Only display_name changes;
+# name and name_key stay as they are, so every stored link keeps resolving.
+# 1. key-stable: normalize_key(display) == name_key, so no URL changes
+various　artists	Various Artists	ENT: ideographic space; not an artist either
+bob marley  the wailers	Bob Marley & The Wailers	DBL
+moda'	Modà	ENT (likely): apostrophe stands in for the accent; same key
+wisin  yandel	Wisin & Yandel	DBL: page is 'Wisin y Yandel'
+hall  oates	Hall & Oates	DBL
+yoshiki fukuyama)	Yoshiki Fukuyama	SCR
+willie nelson(merle haggard	Willie Nelson & Merle Haggard	SCR (likely)
+nick cave  the bad seeds	Nick Cave & The Bad Seeds	DBL
+les misérables original french cast	Les Misérables Original French Cast	ENT: no-break space
+simon  garfunkel	Simon & Garfunkel	DBL: raw uploads: 'Simon&Garfunkel', 'Simon + Garfunkel'
+earth wind  fire	Earth, Wind & Fire	DBL
+fleetwood　ｍａｃ	Fleetwood Mac	ENT: full-width letters
+king gizzard  the lizard wizard	King Gizzard & The Lizard Wizard	DBL
+sly  the family stone	Sly & The Family Stone	DBL
+ike  tina turner	Ike & Tina Turner	DBL
+echo  the bunnymen	Echo & The Bunnymen	DBL
+jan  dean	Jan & Dean	DBL
+kool  the gang	Kool & The Gang	DBL
+bob seger  the silver bullet band	Bob Seger & The Silver Bullet Band	DBL
+crosby stills nash  young	Crosby, Stills, Nash & Young	DBL
+kc  the sunshine band	KC & The Sunshine Band	DBL
+toots  the maytals	Toots & The Maytals	DBL
+blood sweat  tears	Blood, Sweat & Tears	DBL
+gerry  the pacemakers	Gerry & The Pacemakers	DBL
+martha reeves  the vandellas	Martha Reeves & The Vandellas	DBL
+derek  the dominos	Derek & The Dominos	DBL
+# 2. spelling rows that already carry their page's catalogue (alias, 0 titles differ): links land on the page
+rolling stones (the)	The Rolling Stones	SCR
+beatles (the)	The Beatles	SCR
+orchestral manoeuvres in the dark (omd)	Orchestral Manoeuvres in the Dark	DIS
+kinks the	The Kinks	SCR
+smashing pumpkins the	The Smashing Pumpkins	SCR
+black keys (the)	The Black Keys	SCR
+black crowes the	The Black Crowes	SCR
+offspring the	The Offspring	SCR
+cult the	The Cult	SCR
+cadillac three the	The Cadillac Three	SCR
+killers (the)	The Killers	SCR
+kooks (the)	The Kooks	SCR
+cranberries the	The Cranberries	SCR
+decemberists the	The Decemberists	SCR
+tragically hip the	The Tragically Hip	SCR
+dandy warhols (the)	The Dandy Warhols	SCR
+hives (the)	The Hives	SCR
+kills (the)	The Kills	SCR
+doors (the)	The Doors	SCR
+strokes (the)	The Strokes	SCR
+wombats (the)	The Wombats	SCR
+white stripes (the)	The White Stripes	SCR
+fratellis (the)	The Fratellis	SCR
+gathering the	The Gathering	SCR
+black eyed peas the	The Black Eyed Peas	SCR
+velvet underground (the)	The Velvet Underground	SCR
+butterfly effect the	The Butterfly Effect	SCR
+prodigy (the)	The Prodigy	SCR
+temperance movement the	The Temperance Movement	SCR
+libertines (the)	The Libertines	SCR
+cure the	The Cure	SCR
+brandos the	The Brandos	SCR
+fray the	The Fray	SCR
+tenors. the	The Tenors	SCR
+mountain goats (the)	The Mountain Goats	SCR
+beach boys (the)	The Beach Boys	SCR
+bee gees (the)	Bee Gees	SCR
+jackson 5 (the)	The Jackson 5	SCR
+magnetic fields (the)	The Magnetic Fields	SCR
+waterboys (the)	The Waterboys	SCR
+stranglers  the	The Stranglers	SCR: from 'Stranglers, The'
+pretenders (the)	Pretenders	SCR
+pixies (the)	Pixies	SCR
+afghan whigs (the)	The Afghan Whigs	SCR
+eagles (the)	Eagles	SCR
+mike   mechanics	Mike + The Mechanics	DBL: 'The' was lost too
+chemical brothers (the)	The Chemical Brothers	SCR
+human league (the)	The Human League	SCR
+agostino gigi d'	Gigi D'Agostino	SCR
+gun club  the	The Gun Club	SCR: from 'Gun Club, The'
+sisters of mercy (the)	The Sisters of Mercy	SCR
+servant (the)	The Servant	SCR
+affaire louis trio (l')	L'Affaire Louis Trio	SCR
+raconteurs (the)	The Raconteurs	SCR
+# 3. own catalogue, key changes: fold first (_aliases_manual.tsv) or accept that song links resolve on the named page
+#sorriso maroto - baixarpagode.net	Sorriso Maroto	SITE [titles not on target: 20/162]
+#iwan fals - fullalbummp3.net	Iwan Fals	SITE [titles not on target: 21/134]
+#tesla (band)	Tesla	DIS [titles not on target: 3/119]
+#p.o.d. [payable on death]	P.O.D.	DIS (likely) [titles not on target: 4/122]
+#ghostface killah (wu-tang clan)	Ghostface Killah	DIS [titles not on target: 57/100]
+#electric light orchestra (elo)	Electric Light Orchestra	DIS (likely) [titles not on target: 8/126]
+#mötley crue (crazyshark)	Mötley Crüe	SITE [titles not on target: 6/101]
+#celine dion discography	Celine Dion	REL [titles not on target: 13/73]
+#they might be giants (tmbg)	They Might Be Giants	DIS [titles not on target: 8/82]
+#the rolling stones collection	The Rolling Stones	REL (likely) [titles not on target: 1/72]
+#pil (public image ltd.)	Public Image Ltd	DIS (likely) [titles not on target: 1/51]
+#olly alexander (years	Olly Alexander (Years & Years)	SCR (likely): cut at '&' [titles not on target: no target page]
+#ungu - www.fullalbummp3.net	Ungu	SITE [titles not on target: 3/73]
+#tim (1967-) mcgraw	Tim McGraw	SCR: Discogs 'McGraw, Tim (1967-)' [titles not on target: 1/23]
+#skid row (us)	Skid Row	DIS (likely) [titles not on target: 3/66]
+#tony boy (4)	Tony Boy	DIS [titles not on target: 3/67]
+#wasp (we are sexual perverts)	W.A.S.P.	DIS [titles not on target: 21/66]
+#metalium [germany]	Metalium	DIS (likely) [titles not on target: 1/69]
+#mission (uk)	The Mission	DIS (likely) [titles not on target: 7/101]
+#queensryche (remastered)	Queensrÿche	REL [titles not on target: 1/62]
+#blur (1993)	Blur	REL [titles not on target: 4/58]
+#depeche mode - mode (limited edition boxset) [18cd] (2020) flac [pmedia] ⭐️	Depeche Mode	REL [titles not on target: 0/56]
+#ewf (earth wind and fire)	Earth, Wind & Fire	DIS [titles not on target: 2/12]
+#h.i.m. (his infernal majesty)	HIM	DIS [titles not on target: 7/53]
+#featured) julieta venegas (main	Julieta Venegas	SCR: credit roles '(Main)'/'(Featured)' spliced in [titles not on target: 4/54]
+#bruce springsteen - tracks	Bruce Springsteen	REL: 'Tracks' is his 1998 box set [titles not on target: 6/56]
+#mudvayne - megadisco.xyz	Mudvayne	SITE [titles not on target: 0/57]
+#vishal &amp; shekhar	Vishal & Shekhar	ENT [titles not on target: 9/32]
+#celine dion [fazmusic.net]	Celine Dion	SITE [titles not on target: 12/45]
+#incubus (2)	Incubus	DIS [titles not on target: 1/51]
+#pink (p!nk)	P!nk	DIS [titles not on target: 3/49]
+#bad company (3)	Bad Company	DIS [titles not on target: 1/53]
+#johnny (1932-2003) cash	Johnny Cash	SCR [titles not on target: 30/53]
+#avatar (swe)	Avatar	DIS (likely) [titles not on target: 2/53]
+#oh sees) thee oh sees (a.k.a ocs	Thee Oh Sees	SCR (likely) [titles not on target: 7/61]
+#tini (martina stoessel)	TINI	DIS (likely) [titles not on target: 4/43]
+#dover [www.rizcorp.com]	Dover	SITE [titles not on target: 3/52]
+#bob (1941-) dylan	Bob Dylan	SCR [titles not on target: 16/50]
+#joaquin sabina  [aticus]	Joaquin Sabina	SITE (likely): [aticus] reads as an uploader tag [titles not on target: 1/43]
+#leo (main)	Leo	SCR (unsure): '(Main)' is a credit role [titles not on target: 3/15]
+#lujuria (la gruta del mago)	Lujuria	SITE [titles not on target: 9/51]
+#official arctic monkeys	Arctic Monkeys	SITE (unsure): may be a fan channel's uploads [titles not on target: 3/47]
+#passenger (michael david rosenberg)	Passenger	DIS (likely) [titles not on target: 10/49]
+#zucchero_@discos	Zucchero	SITE [titles not on target: 0/29]
+#sublime (2)	Sublime	DIS [titles not on target: 3/47]
+#elvis presley_@discos	Elvis Presley	SITE [titles not on target: 5/28]
+#:of the wand	:Of the Wand & the Moon:	SCR (likely): cut at '&' [titles not on target: no target page]
+#chevelle (2)	Chevelle	DIS [titles not on target: 1/46]
+#led zeppelin [flac]	Led Zeppelin	REL [titles not on target: 0/24]
+#attack attack! (us)	Attack Attack!	DIS (likely) [titles not on target: 2/44]
+#machine head (3)	Machine Head	DIS [titles not on target: 8/41]
+#sheila on 7 - fullalbummp3.net	Sheila On 7	SITE [titles not on target: 2/43]
+#twice (25)	TWICE	DIS [titles not on target: 0/30]
+#david bowie :: 2ddl.vg	David Bowie	SITE [titles not on target: 1/28]
+#queen - platinum collection	Queen	REL [titles not on target: 2/30]
+#soad (system of a down)	System of a Down	DIS [titles not on target: 4/38]
+#alan jackson (2)	Alan Jackson	DIS [titles not on target: 2/35]
+#alt-j (∆)’s	alt-J	SCR (likely) [titles not on target: 4/40]
+#dadju - www.time2rap.io	Dadju	SITE [titles not on target: 2/38]
+#george [us] strait	George Strait	SCR [titles not on target: 1/11]
+#insane clown posse (icp)	Insane Clown Posse	DIS [titles not on target: 2/40]
+#nirvana__www.sectorfile.com	Nirvana	SITE [titles not on target: 0/28]
+#ben&amp;ben	Ben&Ben	ENT [titles not on target: 2/24]
+#boyce avenue(acoustic cover)	Boyce Avenue	REL [titles not on target: 0/7]
+#ant) felt (slug	Felt (Slug & Ant)	SCR (likely) [titles not on target: no target page]
+#b'z - album	B'z	REL [titles not on target: 2/39]
+#steve perry (ex - journey)	Steve Perry	DIS [titles not on target: 1/38]
+#danger 3 jam project (rica matsumoto	JAM Project	SCR (unsure): original credit unclear [titles not on target: 0/36]
+#nirvana (us)	Nirvana	DIS (likely) [titles not on target: 0/28]
+#pink floyd [discovery box set 2011]	Pink Floyd	REL [titles not on target: 3/30]
+#b.r.m.c. (black rebel motorcycle club)	Black Rebel Motorcycle Club	DIS (likely) [titles not on target: 1/39]
+#nate smith (ca)	Nate Smith	DIS (likely) [titles not on target: 1/34]
+#orchestral manoeuvres in the	Orchestral Manoeuvres in the Dark	SCR: cut at 'Dark' [titles not on target: 2/19]
+#2pac (tupac)	2Pac	DIS [titles not on target: 2/19]
+#bastille (4)	Bastille	DIS [titles not on target: 1/30]
+#kol (kings of leon)	Kings of Leon	DIS [titles not on target: 3/35]
+#mcr (modena city ramblers)	Modena City Ramblers	DIS [titles not on target: 13/33]
+#sch (5)	SCH	DIS [titles not on target: 1/33]
+#seether (crazyshark)	Seether	SITE [titles not on target: 1/34]
+#adele (3)	Adele	DIS [titles not on target: 0/22]
+#alcione (flormulher)	Alcione	SITE (likely) [titles not on target: 3/31]
+#bryan adams - by videomann	Bryan Adams	SITE [titles not on target: 1/30]
+#cannons (5)	Cannons	DIS [titles not on target: 2/31]
+#dj willis (williswho.com)	DJ Willis	SITE [titles not on target: no target page]
+#elvis presley - [emg]	Elvis Presley	SITE [titles not on target: 13/24]
+#michael jackson - [emg]	Michael Jackson	SITE [titles not on target: 2/24]
+#nidji - lagubebass.blogspot.com	Nidji	SITE [titles not on target: 3/32]
+#peter gabriel (sacd 2003 remaster)	Peter Gabriel	REL [titles not on target: 0/23]
+#schiller[www.xytune.com]	Schiller	SITE [titles not on target: 16/28]
+#shadmehr aghili  ( wwww.topseda.ir )	Shadmehr Aghili	SITE [titles not on target: 10/30]
+#gold - ub40	UB40	REL (likely) [titles not on target: 2/27]
+#haim (2)	HAIM	DIS [titles not on target: 0/30]
+#jack (1975-) johnson	Jack Johnson	SCR [titles not on target: 1/31]
+#maire(moya) brennan	Máire Brennan	SCR [titles not on target: 1/13]
+#them (featuring van morrison)	Them	DIS (likely) [titles not on target: 0/28]
+#dave matthews band (live)	Dave Matthews Band	REL [titles not on target: 1/29]
+#frans bauer @ 4uonly.biz	Frans Bauer	SITE [titles not on target: 6/29]
+#morat (2)	Morat	DIS [titles not on target: 2/22]
+#sanam (band)	Sanam	DIS [titles not on target: 1/21]
+#the beach boys_@discos	The Beach Boys	SITE [titles not on target: 0/28]
+#100% billie eilish - billie eilish	Billie Eilish	REL (likely) [titles not on target: 1/22]
+#belphegor (aut)	Belphegor	DIS (likely) [titles not on target: 4/36]
+#bis (japan)	BiS	DIS (likely) [titles not on target: 2/28]
+#celtic thunder (2)	Celtic Thunder	DIS [titles not on target: 3/21]
+#christian death (featuring rozz williams)	Christian Death	DIS (likely) [titles not on target: 10/31]
+#eodm (eagles of death metal)	Eagles of Death Metal	DIS [titles not on target: 6/29]
+#hatik - www.time2rap.io	Hatik	SITE [titles not on target: 0/29]
+#kaaris - www.time2rap.io	Kaaris	SITE [titles not on target: 0/26]
+#kevin gates (2)	Kevin Gates	DIS [titles not on target: 2/27]
+#&quot;weird al&quot; yankovic	"Weird Al" Yankovic	ENT [titles not on target: 1/28]
+#38 special - anthology (2001) [flac]	38 Special	REL [titles not on target: 0/27]
+#bronco (10)	Bronco	DIS [titles not on target: 1/27]
+#die apokalyptischen reiter (la gruta del mago)	Die Apokalyptischen Reiter	SITE [titles not on target: 3/28]
+#jul - www.33rapmp3.com	JUL	SITE [titles not on target: 14/28]
+#omar cabán -yurifox-	Omar Cabán	SITE (unsure): -YuriFoX- looks like an uploader tag [titles not on target: no target page]
+#vonda shepard [ally mcbeal]	Vonda Shepard	REL (likely) [titles not on target: 1/19]
+#a-ha [mp3xa.cc]	a-ha	SITE [titles not on target: 0/24]
+#alonzo - www.time2rap.io	Alonzo	SITE [titles not on target: 1/26]
+#b.b. (1925-) king	B.B. King	SCR [titles not on target: 0/5]
+#ben harper; innocent criminals (the)	Ben Harper & The Innocent Criminals	SCR [titles not on target: no target page]
+#dio (2)	Dio	DIS [titles not on target: 1/25]
+#luke kelly (the dubliners)	Luke Kelly	DIS (likely) [titles not on target: 6/28]
+#moein (www.best-ir5.com)	Moein	SITE [titles not on target: 5/27]
+#molotov - todoenmp3.net	Molotov	SITE [titles not on target: 6/26]
+#oasis (2)	Oasis	DIS [titles not on target: 5/23]
+#therion (crazyshark)	Therion	SITE [titles not on target: 7/27]
+#wali - www.fullalbummp3.net	Wali	SITE [titles not on target: 3/27]
+#aitana (2)	Aitana	DIS [titles not on target: 5/24]
+#barbara (5)	Barbara	DIS [titles not on target: 0/21]
+#black sabbath (crazyshark)	Black Sabbath	SITE [titles not on target: 0/17]
+#britney (1981-) spears	Britney Spears	SCR [titles not on target: 4/26]
+#falconer (la gruta del mago)	Falconer	SITE [titles not on target: 2/29]
+#helmet (2)	Helmet	DIS [titles not on target: 0/33]
+#marshmello (2)	Marshmello	DIS [titles not on target: 0/15]
+#mina (3)	Mina	DIS [titles not on target: 14/24]
+#rod stewart (2001)	Rod Stewart	REL [titles not on target: 1/15]
+#shakira              facebook	Shakira	SITE [titles not on target: 4/24]
+#aeon (swe)	Aeon	DIS (likely) [titles not on target: 0/25]
+#asia (2)	Asia	DIS [titles not on target: 1/26]
+#asia (rock)	Asia	DIS (likely) [titles not on target: 0/26]
+#b'z - singles	B'z	REL [titles not on target: 2/24]
+#david bowie - the singles collection (2сd)	David Bowie	REL [titles not on target: 3/11]
+#frank (usa-1990-the capitol years-pop) sinatra	Frank Sinatra	SCR [titles not on target: 12/25]
+#issues (3)	Issues	DIS [titles not on target: 0/25]
+#jimmy buffett (usa)	Jimmy Buffett	DIS [titles not on target: 14/34]
+#kanye west (unreleased)	Kanye West	REL [titles not on target: 13/22]
+#marea [www.rizcorp.com]	Marea	SITE [titles not on target: 3/24]
+#rammstein - megadisco.xyz	Rammstein	SITE [titles not on target: 1/18]
+#sidhu moose wala (riskyjatt.com)	Sidhu Moose Wala	SITE [titles not on target: 6/21]
+#van halen - very best of	Van Halen	REL [titles not on target: 0/20]
+#willie (1933-) nelson	Willie Nelson	SCR [titles not on target: 6/7]

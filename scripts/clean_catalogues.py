@@ -241,6 +241,23 @@ def build_aliases(min_overlap: float = 0.25) -> dict:
     return out
 
 
+# Display names the uploads got wrong ("simon  garfunkel": a lost "&";
+# "Beatles (the)"): name → display. Keyed by the unique name; name and
+# name_key stay, so every stored link keeps resolving.
+DISPLAY_PATH = os.path.join(REVIEW_DIR, "_display.tsv")
+
+
+def display_fixes() -> dict[str, str]:
+    out: dict[str, str] = {}
+    if os.path.exists(DISPLAY_PATH):
+        with open(DISPLAY_PATH, encoding="utf-8") as fh:
+            for line in fh:
+                if line.strip() and not line.startswith("#"):
+                    name, display = line.rstrip("\n").split("\t")[:2]
+                    out[name] = display.strip()
+    return out
+
+
 # Hand-made aliases: credits the first importer split in two ("Simon &
 # Garfunkel" filed under "Simon" and under "Garfunkel"), folded into the duo.
 MANUAL_ALIAS_PATH = os.path.join(REVIEW_DIR, "_aliases_manual.tsv")
@@ -594,6 +611,9 @@ def commit() -> None:
     app.executemany(
         "INSERT INTO artistaggregate (name, name_key, display_name, song_count, has_sections, stats_json, "
         "songs_json, source, built_at) VALUES (?,?,?,?,0,?,?,'lrclib',?)", rows)
+    # after the insert: the key above follows the stored display, not the fix
+    app.executemany("UPDATE artistaggregate SET display_name = ? WHERE name = ?",
+                    [(d, n) for n, d in display_fixes().items()])
     app.commit()
     print("committed", flush=True)
 
@@ -724,6 +744,22 @@ def prod_remove(path: str) -> None:
           f"(their page is not in production)", flush=True)
 
 
+def prod_display() -> None:
+    """Set production display names from _display.tsv (name and key stay)."""
+    import psycopg
+    from build_signatures import prod_url
+
+    fixes = display_fixes()
+    changed = 0
+    with psycopg.connect(prod_url(), connect_timeout=15) as conn:
+        for name, display in fixes.items():
+            cur = conn.execute("UPDATE artistaggregate SET display_name = %s "
+                               "WHERE name = %s AND display_name IS DISTINCT FROM %s", (display, name, display))
+            changed += cur.rowcount
+        conn.commit()
+    print(f"production display names: {changed:,} changed of {len(fixes):,} listed", flush=True)
+
+
 def prod_restore(backup_path: str) -> None:
     """Put back the production rows of a backup that production lacks and the
     app database has again (spellings of a page that an earlier commit
@@ -746,7 +782,8 @@ def prod_restore(backup_path: str) -> None:
                     continue
                 quote = json.loads(r["stats_json"] or "{}").get("motif_quote")
                 p = _prod_row(*local[r["name"]], quote)
-                rows.append((r["id"], r["name"], r["name_key"], r["display_name"], p["song_count"],
+                display = display_fixes().get(r["name"], r["display_name"])
+                rows.append((r["id"], r["name"], r["name_key"], display, p["song_count"],
                              r["has_sections"], p["stats_json"], p["songs_json"], r["source"]))
         with conn.cursor() as cur:
             cur.executemany(
@@ -771,6 +808,7 @@ def main() -> None:
     ap.add_argument("--prod-apply", help="apply a saved production patch")
     ap.add_argument("--prod-remove", help="delete the production rows listed in this file")
     ap.add_argument("--prod-restore", help="put back rows of this backup that are pages again")
+    ap.add_argument("--prod-display", action="store_true", help="set production display names from _display.tsv")
     ap.add_argument("--corpus", action="store_true")
     ap.add_argument("--commit", action="store_true")
     ap.add_argument("--workers", type=int, default=8)
@@ -808,6 +846,8 @@ def main() -> None:
         prod_remove(args.prod_remove)
     if args.prod_restore:
         prod_restore(args.prod_restore)
+    if args.prod_display:
+        prod_display()
 
 
 if __name__ == "__main__":

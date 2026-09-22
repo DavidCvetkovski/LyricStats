@@ -209,6 +209,14 @@ def test_search_finds_a_name_filed_under_and_while_typing_an_ampersand(temp_db):
     assert [a.display_name for a in db.search_artist_aggregates("Mumford & So")] == ["Mumford And Sons"]
     assert [a.display_name for a in db.search_artist_aggregates("mumford & sons")] == ["Mumford And Sons"]
 
+
+def test_search_offers_a_name_once(temp_db):
+    db.upsert_artist_aggregate(name="The Beatles", display_name="The Beatles", song_count=318,
+                               has_sections=False, stats={})
+    db.upsert_artist_aggregate(name="beatles (the)", display_name="The Beatles", song_count=318,
+                               has_sections=False, stats={})
+    assert [a.display_name for a in db.search_artist_aggregates("beatles")] == ["The Beatles"]
+
 def test_search_respects_limit(temp_db):
     for i in range(5):
         db.upsert_artist_aggregate(
