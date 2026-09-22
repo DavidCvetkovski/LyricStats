@@ -253,10 +253,13 @@ def _best_title(rows: list[dict], idx: list[int], artist_words: str) -> str:
 MEDLEY_SPLIT_RE = re.compile(r"\s+/\s+|\s*/\s*(?=[A-Z])|\s+[xX]\s+|\s+vs\.?\s+")
 
 
-def _names_listed_songs(title: str, own_key: str, keys_here: set[str], artist_words: str) -> bool:
-    """A title of two or more parts, one of them another song of this catalogue."""
+def _names_listed_songs(title: str, own_key: str, keys_here: set[str], artist_words: str,
+                        dash: bool = False) -> bool:
+    """A title of two or more parts, one of them another song of this catalogue
+    (`dash`: " - " separates parts too, for a text already known to hold two songs)."""
     t = re.sub(r"^\s*medley\s*:\s*", "", title, flags=re.I)
-    parts = [p for p in MEDLEY_SPLIT_RE.split(t) if p.strip()]
+    parts = [p for p in (re.split(r"\s+[-–]\s+", t) if dash else [t]) for p in MEDLEY_SPLIT_RE.split(p)]
+    parts = [p for p in parts if p.strip()]
     return len(parts) > 1 and all(len(_alnum_squash(p)) >= 3 for p in parts) \
         and any(title_key(p, artist_words) in keys_here - {own_key} for p in parts)
 
@@ -401,7 +404,13 @@ def clean(rows: list[dict], toks: list[Counter], *, display: str, gkey: str,
         own_parts = all(main_key[p].startswith(main_key[big]) for p in ps)
         if MEDLEY_GUARD and not own_parts and \
                 any(containment(vec[p], vec[q]) < 0.5 for i, p in enumerate(ps) for q in ps[i + 1:]):
-            medleys.add(big)
+            # it holds two songs unlike each other: it joins one of them only if
+            # that one is most of it (an extended take), else it stays apart
+            best = max(ps, key=lambda p: size[p])
+            if size[best] >= 0.6 * size[big]:
+                uf2.union(big, best)
+            else:
+                medleys.add(big)
             continue
         for p in ps:
             uf2.union(big, p)
@@ -428,11 +437,10 @@ def clean(rows: list[dict], toks: list[Counter], *, display: str, gkey: str,
         if all(MASH_RE.search(t) for t in raw):
             s.reason = "medley or megamix"
             continue
-        if "holds two songs" in s.flags:
-            s.reason = "medley of songs listed separately"
-            continue
         # "Teddy Bear / Don't Be Cruel": most uploads name songs listed on their own
-        if 2 * sum(_names_listed_songs(t, s.key, keys_here, artist_words) for t in raw) >= len(raw):
+        # (" - " separates them too in a text known to hold two songs)
+        dash = "holds two songs" in s.flags
+        if 2 * sum(_names_listed_songs(t, s.key, keys_here, artist_words, dash=dash) for t in raw) >= len(raw):
             s.reason = "medley of songs listed separately"
             continue
         # a remix the artist is credited for: somebody else's words
@@ -451,7 +459,9 @@ def clean(rows: list[dict], toks: list[Counter], *, display: str, gkey: str,
         if re.search(r"\bvs\.?\s", s.title, re.I) and any(w in _alnum_squash(s.title).split() for w in own_words):
             s.reason = "mash-up"
             continue
-        song_owners = {g for g, _c, _t in owners(s.fp)} if owners is not None and s.fp else set()
+        # an artist named in the title counts when they hold a real share of the song
+        song_owners = {g for g, c, _t in owners(s.fp) if 2 * c >= s.uploads} \
+            if owners is not None and s.fp else set()
         if artist_uploads is not None:
             credited = [other_artist_named(x, gkey, artist_uploads, song_owners) for x in raw]
             named = [c for c in credited if c]
@@ -494,10 +504,20 @@ def _apply_review(songs: list[Song], review: dict, artist_words: str) -> None:
     only = {k(t) for t in review.get("only", [])}
     drop = {k(t): why for t, why in (review.get("drop") or {}).items()}
     keep = {k(t) for t in review.get("keep", [])}
+    # Two songs can share a key (a mislabelled copy kept apart from the song):
+    # then a drop takes only the one shown under the reviewed title itself.
+    by_key: dict[str, list[Song]] = defaultdict(list)
+    for s in songs:
+        by_key[s.key].append(s)
+    exact = {k(t): _alnum_squash(t) for t in (review.get("drop") or {})}
     for s in songs:
         if only:
             s.reason = None if s.key in only else "not in the reviewed list"
         if s.key in drop:
+            twins = by_key[s.key]
+            if len(twins) > 1 and any(_alnum_squash(x.title) == exact[s.key] for x in twins) \
+                    and _alnum_squash(s.title) != exact[s.key]:
+                continue
             s.reason = "reviewed: " + (drop[s.key] or "not theirs")
         elif s.key in keep:
             s.reason = None

@@ -17,7 +17,7 @@ for g in files:
     for kind in ("drop", "keep", "only", "rename"):
         entries = rv.get(kind) or []
         if kind == "rename":  # after the fold the song carries its new title
-            entries = list(entries.values())
+            entries = list((rv.get(kind) or {}).values())
         for t in entries:
             m = by.get(title_key(t, aw), [])
             if len(m) != 1 or VERBOSE:

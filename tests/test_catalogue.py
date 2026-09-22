@@ -187,3 +187,17 @@ def test_a_medley_is_known_by_most_of_its_upload_titles():
     songs = {s.title: s.reason for s in clean(rows, toks, display="Elvis Presley", gkey="elvispresley")}
     assert songs["Teddy Bear"] is None and songs["Don't Be Cruel"] is None
     assert [r for t, r in songs.items() if "Cruel" in t and "Teddy" in t] == ["medley of songs listed separately"]
+
+
+def test_a_drop_takes_only_the_song_shown_under_its_title_when_two_share_a_key():
+    from catalogue import Song, _apply_review
+    main = Song(rows=[0], rep=0, title="If", key="if", uploads=92)
+    copy = Song(rows=[1], rep=1, title="If (with Mitchell Ayres & His Orchestra)", key="if", uploads=1)
+    _apply_review([main, copy], {"drop": {"If (with Mitchell Ayres & His Orchestra)": "second copy"}}, "perry como")
+    assert main.reason is None and copy.reason == "reviewed: second copy"
+
+
+def test_a_suite_holding_its_movements_stays_a_song():
+    rows, toks = _rows([("2112", (SONG_A + SONG_B) * 3, 40, 500), ("Overture", SONG_A * 3, 5, 200),
+                        ("The Temples of Syrinx", SONG_B * 3, 5, 200)], artist="Rush")
+    assert _kept(clean(rows, toks, display="Rush", gkey="rush")) == ["2112", "Overture", "The Temples of Syrinx"]
